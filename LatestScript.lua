@@ -3,8 +3,7 @@
 local GITHUB_USER   = "AknownGuy"
 local GITHUB_REPO   = "jones_code"
 local GITHUB_BRANCH = "master"
-local SCRIPT_FILE   = "LatestScript.lua" -- exact repo-relative path, case-sensitive
-local GITHUB_TOKEN  = nil -- only set this if the repo is private
+local SCRIPT_FILE   = "LatestScript.lua"
 
 local HttpService = game:GetService("HttpService")
 
@@ -16,34 +15,15 @@ local requestFn =
 
 local commitHash = "unknown"
 
-local function encodePathSegments(path)
-    path = path:gsub("^/+", "")
-    local parts = string.split(path, "/")
-    for i, part in ipairs(parts) do
-        parts[i] = HttpService:UrlEncode(part)
-    end
-    return table.concat(parts, "/")
-end
-
 local function githubGet(url)
-    if type(requestFn) ~= "function" then
-        error("No supported request function found")
-    end
-
-    local headers = {
-        ["Accept"] = "application/vnd.github+json",
-        ["User-Agent"] = "RobloxCommitFetcher",
-        ["X-GitHub-Api-Version"] = "2022-11-28",
-    }
-
-    if GITHUB_TOKEN and GITHUB_TOKEN ~= "" then
-        headers["Authorization"] = "Bearer " .. GITHUB_TOKEN
-    end
-
     local response = requestFn({
         Url = url,
         Method = "GET",
-        Headers = headers
+        Headers = {
+            ["Accept"] = "application/vnd.github+json",
+            ["User-Agent"] = "RobloxCommitFetcher",
+            ["X-GitHub-Api-Version"] = "2022-11-28",
+        }
     })
 
     if not response then
@@ -51,71 +31,49 @@ local function githubGet(url)
     end
 
     local statusCode = tonumber(response.StatusCode or response.Status) or 0
-    local body = response.Body or ""
-
-    return statusCode, body
+    return statusCode, response.Body or ""
 end
 
-local function getCurrentFileCommit()
-    local owner = HttpService:UrlEncode(GITHUB_USER)
-    local repo = HttpService:UrlEncode(GITHUB_REPO)
-    local branch = HttpService:UrlEncode(GITHUB_BRANCH)
-    local filePathForUrl = encodePathSegments(SCRIPT_FILE)
-    local filePathForQuery = HttpService:UrlEncode(SCRIPT_FILE)
-
-    -- 1) Check repo + branch
-    local branchUrl = string.format(
-        "https://api.github.com/repos/%s/%s/branches/%s",
-        owner, repo, branch
-    )
-
-    local statusCode, body = githubGet(branchUrl)
-    if statusCode == 404 then
-        error("Repo/branch not found, or repo is private")
-    elseif statusCode ~= 200 then
-        error(("Branch check failed (%d): %s"):format(statusCode, body))
+local function getFileCommit()
+    if type(requestFn) ~= "function" then
+        error("No supported request function found")
     end
 
-    -- 2) Check file exists on branch
-    local fileUrl = string.format(
-        "https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
-        owner, repo, filePathForUrl, branch
-    )
-
-    statusCode, body = githubGet(fileUrl)
-    if statusCode == 404 then
-        error(("File not found on branch '%s': %s"):format(GITHUB_BRANCH, SCRIPT_FILE))
-    elseif statusCode ~= 200 then
-        error(("File check failed (%d): %s"):format(statusCode, body))
-    end
-
-    -- 3) Get latest commit that changed this file
-    local commitsUrl = string.format(
+    local url = string.format(
         "https://api.github.com/repos/%s/%s/commits?sha=%s&path=%s&per_page=1",
-        owner, repo, branch, filePathForQuery
+        HttpService:UrlEncode(GITHUB_USER),
+        HttpService:UrlEncode(GITHUB_REPO),
+        HttpService:UrlEncode(GITHUB_BRANCH),
+        HttpService:UrlEncode(SCRIPT_FILE)
     )
 
-    statusCode, body = githubGet(commitsUrl)
+    local statusCode, body = githubGet(url)
+
+    if statusCode == 404 then
+        error("Repo/file not found, branch is wrong, or repo is private")
+    end
+
     if statusCode ~= 200 then
-        error(("Commit lookup failed (%d): %s"):format(statusCode, body))
+        error(("GitHub request failed (%d): %s"):format(statusCode, body))
     end
 
     local data = HttpService:JSONDecode(body)
-    if type(data) ~= "table" or not data[1] or not data[1].sha then
-        error("No commit SHA found for file: " .. SCRIPT_FILE)
+    if not data or not data[1] or not data[1].sha then
+        error("No commit SHA found")
     end
 
     return data[1].sha
 end
 
-local ok, result = pcall(getCurrentFileCommit)
+local ok, result = pcall(getFileCommit)
 if ok then
-    commitHash = result:sub(1, 7) -- short hash
+    commitHash = result:sub(1, 7)
 else
     warn("Commit fetch failed: " .. tostring(result))
 end
 
 print("Loaded | Commit: " .. commitHash)
+-----------------
 
 local Players           = game:GetService("Players")
 local UserInputService  = game:GetService("UserInputService")
