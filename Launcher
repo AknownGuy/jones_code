@@ -1,0 +1,436 @@
+local GITHUB_USER = "AknownGuy"
+local GITHUB_REPO = "jones_code"
+local GITHUB_BRANCH = "master"
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local requestFn =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+
+local function githubApiUrl(path)
+    return string.format(
+        "https://api.github.com/repos/%s/%s/%s",
+        HttpService:UrlEncode(GITHUB_USER),
+        HttpService:UrlEncode(GITHUB_REPO),
+        path
+    )
+end
+
+local function rawFileUrl(path)
+    local safePath = path:gsub("^/+", "")
+    return string.format(
+        "https://raw.githubusercontent.com/%s/%s/%s/%s",
+        GITHUB_USER,
+        GITHUB_REPO,
+        GITHUB_BRANCH,
+        safePath
+    )
+end
+
+local function httpGet(url, useGithubHeaders)
+    if type(requestFn) == "function" then
+        local response = requestFn({
+            Url = url,
+            Method = "GET",
+            Headers = useGithubHeaders and {
+                ["Accept"] = "application/vnd.github+json",
+                ["User-Agent"] = "RobloxRepoLauncher",
+                ["X-GitHub-Api-Version"] = "2022-11-28",
+            } or {},
+        })
+
+        if not response then
+            error("No response from request function")
+        end
+
+        local statusCode = tonumber(response.StatusCode or response.Status) or 0
+        if statusCode < 200 or statusCode >= 300 then
+            error(("HTTP %d: %s"):format(statusCode, tostring(response.Body)))
+        end
+
+        return response.Body or ""
+    end
+
+    if game and game.HttpGet then
+        local ok, body = pcall(function()
+            return game:HttpGet(url)
+        end)
+
+        if ok then
+            return body
+        end
+    end
+
+    error("No supported HTTP function found")
+end
+
+local function fetchLuaFiles()
+    local url = githubApiUrl("git/trees/" .. HttpService:UrlEncode(GITHUB_BRANCH) .. "?recursive=1")
+    local body = httpGet(url, true)
+    local decoded = HttpService:JSONDecode(body)
+    local tree = decoded and decoded.tree
+
+    if type(tree) ~= "table" then
+        error("GitHub tree response was missing file data")
+    end
+
+    local files = {}
+
+    for _, item in ipairs(tree) do
+        if item.type == "blob" and type(item.path) == "string" and item.path:lower():match("%.lua$") then
+            table.insert(files, {
+                name = item.path:match("([^/]+)$") or item.path,
+                path = item.path,
+                url = rawFileUrl(item.path),
+            })
+        end
+    end
+
+    table.sort(files, function(a, b)
+        return a.path:lower() < b.path:lower()
+    end)
+
+    return files
+end
+
+local function makeCorner(instance, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = instance
+    return corner
+end
+
+local function makeStroke(instance, color, transparency)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color
+    stroke.Transparency = transparency or 0
+    stroke.Parent = instance
+    return stroke
+end
+
+local C = {
+    bg = Color3.fromRGB(11, 15, 24),
+    panel = Color3.fromRGB(19, 26, 37),
+    panelAlt = Color3.fromRGB(24, 35, 48),
+    text = Color3.fromRGB(239, 244, 250),
+    sub = Color3.fromRGB(145, 159, 179),
+    blue = Color3.fromRGB(88, 156, 255),
+    green = Color3.fromRGB(76, 203, 162),
+    red = Color3.fromRGB(214, 97, 97),
+    gold = Color3.fromRGB(235, 191, 99),
+    stroke = Color3.fromRGB(69, 92, 126),
+}
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "GithubRepoLauncher"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name = "Main"
+frame.Size = UDim2.new(0, 470, 0, 560)
+frame.Position = UDim2.new(0.5, -235, 0.5, -280)
+frame.BackgroundColor3 = C.bg
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+makeCorner(frame, 14)
+makeStroke(frame, C.stroke, 0.15)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 46)
+titleBar.BackgroundColor3 = C.panel
+titleBar.BorderSizePixel = 0
+titleBar.Parent = frame
+makeCorner(titleBar, 14)
+
+local titlePatch = Instance.new("Frame")
+titlePatch.Size = UDim2.new(1, 0, 0, 12)
+titlePatch.Position = UDim2.new(0, 0, 1, -12)
+titlePatch.BackgroundColor3 = C.panel
+titlePatch.BorderSizePixel = 0
+titlePatch.Parent = titleBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.BackgroundTransparency = 1
+titleLabel.Position = UDim2.new(0, 14, 0, 5)
+titleLabel.Size = UDim2.new(1, -120, 0, 18)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 15
+titleLabel.TextColor3 = C.text
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Text = "GitHub Script Launcher"
+titleLabel.Parent = titleBar
+
+local repoLabel = Instance.new("TextLabel")
+repoLabel.BackgroundTransparency = 1
+repoLabel.Position = UDim2.new(0, 14, 0, 24)
+repoLabel.Size = UDim2.new(1, -120, 0, 16)
+repoLabel.Font = Enum.Font.Gotham
+repoLabel.TextSize = 10
+repoLabel.TextColor3 = C.sub
+repoLabel.TextXAlignment = Enum.TextXAlignment.Left
+repoLabel.Text = GITHUB_USER .. "/" .. GITHUB_REPO .. "  [" .. GITHUB_BRANCH .. "]"
+repoLabel.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 24)
+closeBtn.Position = UDim2.new(1, -36, 0.5, -12)
+closeBtn.BackgroundColor3 = Color3.fromRGB(67, 31, 35)
+closeBtn.BorderSizePixel = 0
+closeBtn.AutoButtonColor = false
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 12
+closeBtn.TextColor3 = C.red
+closeBtn.Parent = titleBar
+makeCorner(closeBtn, 8)
+
+local infoCard = Instance.new("Frame")
+infoCard.Size = UDim2.new(1, -24, 0, 88)
+infoCard.Position = UDim2.new(0, 12, 0, 58)
+infoCard.BackgroundColor3 = C.panel
+infoCard.BorderSizePixel = 0
+infoCard.Parent = frame
+makeCorner(infoCard, 12)
+makeStroke(infoCard, C.stroke, 0.45)
+
+local infoPadding = Instance.new("UIPadding")
+infoPadding.PaddingTop = UDim.new(0, 10)
+infoPadding.PaddingBottom = UDim.new(0, 10)
+infoPadding.PaddingLeft = UDim.new(0, 10)
+infoPadding.PaddingRight = UDim.new(0, 10)
+infoPadding.Parent = infoCard
+
+local infoLayout = Instance.new("UIListLayout")
+infoLayout.Padding = UDim.new(0, 4)
+infoLayout.Parent = infoCard
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, 0, 0, 18)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 12
+statusLabel.TextColor3 = C.blue
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Text = "Loading repo scripts..."
+statusLabel.Parent = infoCard
+
+local helperLabel = Instance.new("TextLabel")
+helperLabel.BackgroundTransparency = 1
+helperLabel.AutomaticSize = Enum.AutomaticSize.Y
+helperLabel.Size = UDim2.new(1, 0, 0, 0)
+helperLabel.Font = Enum.Font.Gotham
+helperLabel.TextSize = 10
+helperLabel.TextColor3 = C.sub
+helperLabel.TextWrapped = true
+helperLabel.TextXAlignment = Enum.TextXAlignment.Left
+helperLabel.TextYAlignment = Enum.TextYAlignment.Top
+helperLabel.Text = "This scans the GitHub repo for every .lua file. Clicking one downloads it, closes this launcher, and executes the selected script."
+helperLabel.Parent = infoCard
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(0, 92, 0, 24)
+refreshBtn.BackgroundColor3 = C.panelAlt
+refreshBtn.BorderSizePixel = 0
+refreshBtn.AutoButtonColor = false
+refreshBtn.Text = "REFRESH"
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 10
+refreshBtn.TextColor3 = C.text
+refreshBtn.Parent = infoCard
+makeCorner(refreshBtn, 8)
+
+local listFrame = Instance.new("ScrollingFrame")
+listFrame.Size = UDim2.new(1, -24, 1, -158)
+listFrame.Position = UDim2.new(0, 12, 0, 152)
+listFrame.BackgroundColor3 = C.panel
+listFrame.BorderSizePixel = 0
+listFrame.ScrollBarThickness = 4
+listFrame.ScrollBarImageColor3 = C.stroke
+listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+listFrame.Parent = frame
+makeCorner(listFrame, 12)
+makeStroke(listFrame, C.stroke, 0.45)
+
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 10)
+listPadding.PaddingBottom = UDim.new(0, 10)
+listPadding.PaddingLeft = UDim.new(0, 10)
+listPadding.PaddingRight = UDim.new(0, 10)
+listPadding.Parent = listFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 8)
+listLayout.Parent = listFrame
+
+local loading = false
+local currentButtons = {}
+
+local function clearButtons()
+    for _, instance in ipairs(currentButtons) do
+        if instance and instance.Parent then
+            instance:Destroy()
+        end
+    end
+    table.clear(currentButtons)
+end
+
+local function setStatus(text, color)
+    statusLabel.Text = text
+    statusLabel.TextColor3 = color or C.blue
+end
+
+local function launchScript(fileInfo)
+    if loading then
+        return
+    end
+
+    loading = true
+    setStatus("Downloading " .. fileInfo.name .. "...", C.gold)
+
+    local ok, sourceOrError = pcall(function()
+        return httpGet(fileInfo.url, false)
+    end)
+
+    if not ok then
+        loading = false
+        setStatus("Download failed: " .. tostring(sourceOrError), C.red)
+        return
+    end
+
+    if type(loadstring) ~= "function" then
+        loading = false
+        setStatus("This executor does not support loadstring", C.red)
+        return
+    end
+
+    local chunk, compileError = loadstring(sourceOrError, fileInfo.name)
+    if not chunk then
+        loading = false
+        setStatus("Compile failed: " .. tostring(compileError), C.red)
+        return
+    end
+
+    local env = (getgenv and getgenv()) or _G
+    env.SelectedGithubScript = fileInfo.path
+    env.SelectedGithubScriptUrl = fileInfo.url
+
+    gui:Destroy()
+
+    local runOk, runError = pcall(chunk)
+    if not runOk then
+        warn("[Launcher] Script runtime error: " .. tostring(runError))
+    end
+end
+
+local function addScriptButton(fileInfo)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 64)
+    card.BackgroundColor3 = C.panelAlt
+    card.BorderSizePixel = 0
+    card.Parent = listFrame
+    makeCorner(card, 10)
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.Parent = card
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.Size = UDim2.new(1, -96, 0, 18)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 12
+    nameLabel.TextColor3 = C.text
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Text = fileInfo.name
+    nameLabel.Parent = card
+
+    local pathLabel = Instance.new("TextLabel")
+    pathLabel.BackgroundTransparency = 1
+    pathLabel.Position = UDim2.new(0, 0, 0, 22)
+    pathLabel.Size = UDim2.new(1, -96, 0, 24)
+    pathLabel.Font = Enum.Font.Gotham
+    pathLabel.TextSize = 10
+    pathLabel.TextColor3 = C.sub
+    pathLabel.TextWrapped = true
+    pathLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pathLabel.TextYAlignment = Enum.TextYAlignment.Top
+    pathLabel.Text = fileInfo.path
+    pathLabel.Parent = card
+
+    local launchBtn = Instance.new("TextButton")
+    launchBtn.Size = UDim2.new(0, 82, 0, 28)
+    launchBtn.Position = UDim2.new(1, -82, 0.5, -14)
+    launchBtn.BackgroundColor3 = C.green
+    launchBtn.BorderSizePixel = 0
+    launchBtn.AutoButtonColor = false
+    launchBtn.Text = "LAUNCH"
+    launchBtn.Font = Enum.Font.GothamBold
+    launchBtn.TextSize = 10
+    launchBtn.TextColor3 = Color3.fromRGB(10, 16, 24)
+    launchBtn.Parent = card
+    makeCorner(launchBtn, 8)
+
+    launchBtn.MouseButton1Click:Connect(function()
+        launchScript(fileInfo)
+    end)
+
+    table.insert(currentButtons, card)
+end
+
+local function loadRepoScripts()
+    if loading then
+        return
+    end
+
+    loading = true
+    clearButtons()
+    setStatus("Scanning GitHub repo for .lua files...", C.blue)
+
+    local ok, filesOrError = pcall(fetchLuaFiles)
+    if not ok then
+        loading = false
+        setStatus("Failed to scan repo: " .. tostring(filesOrError), C.red)
+        return
+    end
+
+    local files = filesOrError
+
+    if #files == 0 then
+        loading = false
+        setStatus("No .lua files found in repo", C.red)
+        return
+    end
+
+    for _, fileInfo in ipairs(files) do
+        addScriptButton(fileInfo)
+    end
+
+    loading = false
+    setStatus("Found " .. #files .. " Lua scripts", C.green)
+end
+
+closeBtn.MouseButton1Click:Connect(function()
+    gui:Destroy()
+end)
+
+refreshBtn.MouseButton1Click:Connect(function()
+    loadRepoScripts()
+end)
+
+task.spawn(loadRepoScripts)
