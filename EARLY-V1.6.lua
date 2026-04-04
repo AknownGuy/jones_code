@@ -445,7 +445,7 @@ titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 14
 titleLabel.TextColor3 = C.text
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Text = 'MENU  //  V1.6'
+titleLabel.Text = 'MENU  //  V1.6 (676767)'
 titleLabel.Parent = titleBar
 
 local commitLabel = Instance.new('TextLabel')
@@ -972,38 +972,38 @@ activateBtn.TextColor3 = C.text
 activateBtn.Parent = breakerButtons
 Instance.new('UICorner', activateBtn).CornerRadius = UDim.new(0, 9)
 
-local generatorCard = makeCard(mainPage, 'Generator', 'Runs GeneratorStart followed by A to Z.', C.blue)
+local generatorCard = makeCard(mainPage, 'Generator', 'Activates all the generators on room 19', C.blue)
 local genStatus = makeStatus(generatorCard, 'Status: ready  (A to Z)', C.blue)
 local genProg = makeProgress(generatorCard, C.blue)
 local genBtn = makeButton(generatorCard, 'SOLVE GENERATOR  [' .. keyName(keybinds.generator) .. ']', Color3.fromRGB(42, 71, 135), 32)
 
-local playerCard = makeCard(mainPage, 'Player', 'Utility toggles kept together so the main page stays readable.', C.gold)
-local godToggle, godActive, godInactive = makeToggleRow(playerCard, 'God mode (auto-heal to max HP)', Color3.fromRGB(41, 112, 78), Color3.fromRGB(79, 34, 34))
+local playerCard = makeCard(mainPage, 'Player', 'Player modificators such as god mode', C.gold)
+local godToggle, godActive, godInactive = makeToggleRow(playerCard, 'God mode (auto-heal)', Color3.fromRGB(41, 112, 78), Color3.fromRGB(79, 34, 34))
 local healInput = makeInputRow(playerCard, 'Heal amount', healValue, C.green)
 local healBtn = makeButton(playerCard, 'HEAL PLAYER', Color3.fromRGB(50, 122, 75), 34)
-local nvToggle, nvActive, nvInactive = makeToggleRow(playerCard, 'Night vision loop (every 10s)', Color3.fromRGB(54, 95, 171), Color3.fromRGB(58, 40, 82))
+local nvToggle, nvActive, nvInactive = makeToggleRow(playerCard, 'Night vision', Color3.fromRGB(54, 95, 171), Color3.fromRGB(58, 40, 82))
 local cursorBtn = makeButton(playerCard, 'CURSOR: UNLOCKED  [' .. keyName(keybinds.cursor) .. ']', Color3.fromRGB(53, 49, 92), 34)
 local autoFloorToggle, afActive, afInactive = makeToggleRow(playerCard, 'Auto floor  [' .. keyName(keybinds.autofloor) .. ']', Color3.fromRGB(92, 68, 161), Color3.fromRGB(55, 43, 84))
 local autoFloorStatus = makeStatus(playerCard, 'Auto floor: off', Color3.fromRGB(178, 164, 225))
 
-local tokenCard = makeCard(mainPage, 'Tokens', 'Quick reward fire for testing token values.', C.gold)
+local tokenCard = makeCard(mainPage, 'Tokens', 'Grant yourself any amount of Tokens!.', C.gold)
 local moneyInput = makeInputRow(tokenCard, 'Token amount', moneyValue, C.gold)
 local moneyBtn = makeButton(tokenCard, 'ADD MONEY', Color3.fromRGB(132, 96, 39), 34)
 
-local abilitiesCard = makeCard(abilitiesPage, 'Abilities', 'Manual ability triggers live here so the main tab stays cleaner.', C.blue)
-local allOrNothingBtn = makeAbilityRow(abilitiesCard, 'All Or Nothing', 'Fires the All Or Nothing remote.', 'USE ALL OR NOTHING', Color3.fromRGB(120, 89, 43), {
+local abilitiesCard = makeCard(abilitiesPage, 'Abilities', 'Ability triggering, spamming can lead to unexpected results.', C.blue)
+local allOrNothingBtn = makeAbilityRow(abilitiesCard, 'All Or Nothing', 'Requires the Badge to gamble', 'USE ALL OR NOTHING', Color3.fromRGB(120, 89, 43), {
     badgeText = 'REQ BADGE',
     badgeColor = C.gold,
     large = true,
 })
-local haltBtn = makeAbilityRow(abilitiesCard, 'Halt', 'Triggers the Halt ability event.', 'USE HALT', Color3.fromRGB(58, 113, 171))
-local seekerBtn = makeAbilityRow(abilitiesCard, 'Seeker', 'Uses the NightVision event as a direct ability trigger.', 'USE SEEKER', Color3.fromRGB(47, 128, 120))
-local dashBtn = makeAbilityRow(abilitiesCard, 'Dash', 'Currently broken and intentionally disabled.', 'DASH BROKEN', Color3.fromRGB(74, 77, 85), {
-    badgeText = 'BROKEN',
+local haltBtn = makeAbilityRow(abilitiesCard, 'Halt', 'Who controls the past controls the future', 'USE HALT', Color3.fromRGB(58, 113, 171))
+local seekerBtn = makeAbilityRow(abilitiesCard, 'Seeker', 'Your basic breaker ESP.', 'USE SEEKER', Color3.fromRGB(47, 128, 120))
+local dashBtn = makeAbilityRow(abilitiesCard, 'Dash', 'Currently does not work.', 'USE DASH', Color3.fromRGB(74, 77, 85), {
+    badgeText = 'DISABLED',
     badgeColor = C.red,
     disabled = true,
 })
-local lastBreathBtn = makeAbilityRow(abilitiesCard, 'Last Breath', 'Triggers the Last Breath ability event.', 'USE LAST BREATH', Color3.fromRGB(146, 82, 86))
+local lastBreathBtn = makeAbilityRow(abilitiesCard, 'Last Breath', 'Makes you true Chad and Adam', 'USE LAST BREATH', Color3.fromRGB(146, 82, 86))
 local abilitiesStatus = makeStatus(abilitiesCard, 'Abilities: ready', C.sub)
 
 local utilityCard = makeCard(utilitiesPage, 'Utilities', 'Movement tools and server speed controls.', C.green)
@@ -1075,10 +1075,10 @@ end
 local bindsNote = makeStatus(bindCard, 'ESC = cancel. Fly can be left as NONE if you do not want a bind.', C.sub)
 
 local experimentalCard = makeCard(experimentalPage, 'Experimental', 'Extra actions that are useful to keep separate from the safer main controls.', C.red)
-local teleportPlayersBtn = makeButton(experimentalCard, 'TELEPORT PLAYERS', Color3.fromRGB(85, 99, 177), 32)
-local playerLoadedBtn = makeButton(experimentalCard, 'FIRE PLAYER LOADED', Color3.fromRGB(72, 123, 110), 32)
+local teleportPlayersBtn = makeButton(experimentalCard, 'TELEPORT PLAYERS [F.0]', Color3.fromRGB(85, 99, 177), 32)
+local playerLoadedBtn = makeButton(experimentalCard, 'FIRE PLAYER LOADED [???]', Color3.fromRGB(72, 123, 110), 32)
 local newTpToggle, ntpActive, ntpInactive = makeToggleRow(experimentalCard, 'New teleport system (instant TP)', Color3.fromRGB(67, 118, 198), Color3.fromRGB(49, 58, 86))
-local experimentalDesc = makeStatus(experimentalCard, 'OFF = tween slide (stable) | ON = instant snap with midpoint steps.', C.sub)
+local experimentalDesc = makeStatus(experimentalCard, 'OFF = tween slide (stable) | ON = instant snapping', C.sub)
 local bacteriumToggle, batActive, batInactive = makeToggleRow(experimentalCard, 'Avoid Bacterium (broken)', Color3.fromRGB(133, 57, 61), Color3.fromRGB(73, 42, 50))
 local batStatus = makeStatus(experimentalCard, 'Bacterium: off  (broken - do not rely on this)', C.red)
 
