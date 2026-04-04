@@ -1,28 +1,70 @@
 -- Menu V1.55 | G=menu | V=breakers | F=generator | X=cursor | H=autofloor
 
 -- ──────────────── GITHUB COMMIT FETCH ────────────────
--- Change these four variables to point at your repo and file.
 local GITHUB_USER   = "AknownGuy"
 local GITHUB_REPO   = "jones_code"
 local GITHUB_BRANCH = "main"
-local SCRIPT_FILE   = "LatestScript.lua"
+local SCRIPT_FILE   = "LatestScript.lua" -- repo-relative path, e.g. "folder/LatestScript.lua"
 
-local commitHash = "unknown"
 local HttpService = game:GetService("HttpService")
 
-pcall(function()
+local requestFn =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+
+local commitHash = "unknown"
+
+local function getLatestFileCommit()
+    if type(requestFn) ~= "function" then
+        error("No supported request function found")
+    end
+
     local url = string.format(
         "https://api.github.com/repos/%s/%s/commits?sha=%s&path=%s&per_page=1",
-        GITHUB_USER, GITHUB_REPO, GITHUB_BRANCH, SCRIPT_FILE
+        HttpService:UrlEncode(GITHUB_USER),
+        HttpService:UrlEncode(GITHUB_REPO),
+        HttpService:UrlEncode(GITHUB_BRANCH),
+        HttpService:UrlEncode(SCRIPT_FILE)
     )
-    local response = request({ Url = url, Method = "GET" })
-    if response and response.Body then
-        local data = HttpService:JSONDecode(response.Body)
-        if data and data[1] and data[1].sha then
-            commitHash = string.sub(data[1].sha, 1, 7)
-        end
+
+    local response = requestFn({
+        Url = url,
+        Method = "GET",
+        Headers = {
+            ["Accept"] = "application/vnd.github+json",
+            ["User-Agent"] = "RobloxCommitFetcher",
+            ["X-GitHub-Api-Version"] = "2022-11-28",
+        }
+    })
+
+    if not response then
+        error("No response from GitHub")
     end
-end)
+
+    local statusCode = response.StatusCode or response.Status
+    if statusCode ~= 200 then
+        error(("GitHub request failed (%s): %s"):format(
+            tostring(statusCode),
+            tostring(response.Body)
+        ))
+    end
+
+    local data = HttpService:JSONDecode(response.Body)
+    if type(data) ~= "table" or not data[1] or not data[1].sha then
+        error("No commit SHA found for file: " .. SCRIPT_FILE)
+    end
+
+    return data[1].sha
+end
+
+local ok, result = pcall(getLatestFileCommit)
+if ok then
+    commitHash = result -- use result:sub(1, 7) if you only want the short hash
+else
+    warn("Commit fetch failed: " .. tostring(result))
+end
 
 print("Loaded | Commit: " .. commitHash)
 -- ──────────────────────────────────────────────────────
