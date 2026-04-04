@@ -22,12 +22,11 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/
 - Granting Tokens
 - Breaker and Generator ESP
 - Ability to change keybinds
+- Ability for Multiple Abilities
+- Basic Utilities Like Fly, Noclip, And Speed
 
 ### Possible additions in future versions can include:
 
-- *Using multiple abilities at once*
-- Speed, Fly, Noclip
-- Ability spoofing
 - Anti entity
 - Settings tab
 - Better God Mode
