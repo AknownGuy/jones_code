@@ -15,8 +15,9 @@ This script includes the following in the LatestScript:
 - Healing
 - Experimental Functions such as Anti Bacterium
 - Granting Tokens
-- Esp
+- Breaker and Generator ESP
 - Ability to change keybinds
+- Current Script Commit
 
 ### Functions to come (50/50)
 
@@ -26,3 +27,4 @@ This script includes the following in the LatestScript:
 - Anti entity
 - Settings tab
 - Better God Mode
+- Better GUI
