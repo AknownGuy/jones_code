@@ -1,5 +1,32 @@
 -- Menu V1.55 | G=menu | V=breakers | F=generator | X=cursor | H=autofloor
 
+-- ──────────────── GITHUB COMMIT FETCH ────────────────
+-- Change these four variables to point at your repo and file.
+local GITHUB_USER   = "AknownGuy"
+local GITHUB_REPO   = "jones_code"
+local GITHUB_BRANCH = "main"
+local SCRIPT_FILE   = "LatestScript.lua"
+
+local commitHash = "unknown"
+local HttpService = game:GetService("HttpService")
+
+pcall(function()
+    local url = string.format(
+        "https://api.github.com/repos/%s/%s/commits?sha=%s&path=%s&per_page=1",
+        GITHUB_USER, GITHUB_REPO, GITHUB_BRANCH, SCRIPT_FILE
+    )
+    local response = request({ Url = url, Method = "GET" })
+    if response and response.Body then
+        local data = HttpService:JSONDecode(response.Body)
+        if data and data[1] and data[1].sha then
+            commitHash = string.sub(data[1].sha, 1, 7)
+        end
+    end
+end)
+
+print("Loaded | Commit: " .. commitHash)
+-- ──────────────────────────────────────────────────────
+
 local Players           = game:GetService("Players")
 local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -378,6 +405,18 @@ tpatch.BackgroundColor3 = CP; tpatch.BorderSizePixel = 0; tpatch.Parent = titleB
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Text           = "MENU  //  V1.55"
+
+-- small commit label sitting to the right of the version text
+local commitLabel = Instance.new("TextLabel")
+commitLabel.Text               = commitHash
+commitLabel.Font               = Enum.Font.Gotham
+commitLabel.TextSize           = 9
+commitLabel.TextColor3         = Color3.fromRGB(80, 80, 110)
+commitLabel.BackgroundTransparency = 1
+commitLabel.Size               = UDim2.new(0, 55, 0, 14)
+commitLabel.Position           = UDim2.new(0, 130, 0.5, -7)
+commitLabel.TextXAlignment     = Enum.TextXAlignment.Left
+commitLabel.Parent             = titleBar
 titleLabel.Font           = Enum.Font.GothamBold
 titleLabel.TextSize       = 13
 titleLabel.TextColor3     = CT
