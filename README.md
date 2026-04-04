@@ -13,7 +13,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/
 ### Includes the following :
 
 - Autofloor function
-- Teleport + Activate Breakers function
+- Activate Breakers function
 - Activate Breakers function
 - Fix all generators
 - God Mode *(insta heal)*
@@ -22,9 +22,8 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/
 - Granting Tokens
 - Breaker and Generator ESP
 - Ability to change keybinds
-- Current Script Commit
 
-### Functions to come (50/50)
+### Possible additions in future versions can include:
 
 - *Using multiple abilities at once*
 - Speed, Fly, Noclip
