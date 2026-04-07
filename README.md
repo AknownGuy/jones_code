@@ -15,5 +15,3 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/LARP_Hub/ma
 ### Includes the following (In the most stable Script) :
 
 - Error Code script
-gfgrefeef
-    
