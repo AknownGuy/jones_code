@@ -1,713 +1,609 @@
--- ============================================================
---  LARP SYSTEM - Rayfield UI
---  Place this LocalScript inside StarterPlayerScripts
--- ============================================================
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players           = game:GetService("Players")
-local TweenService      = game:GetService("TweenService")
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
-
+local GITHUB_USER = "AknownGuy"
+local GITHUB_REPO = "LARP_Hub"
+local GITHUB_BRANCH = "master"
+local LAUNCHER_PATH = "Larp"
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid    = Character:WaitForChild("Humanoid")
-
--- ── Load Rayfield ────────────────────────────────────────────
-local Rayfield = loadstring(
-    game:HttpGet("https://sirius.menu/rayfield")
-)()
-
--- ============================================================
---  LARP DATA
--- ============================================================
-
-local Classes = {
-    Warrior = {
-        icon      = "⚔️",
-        color     = Color3.fromRGB(200, 60,  60),
-        hp        = 150,
-        mana      = 40,
-        stamina   = 120,
-        walkSpeed = 16,
-        abilities = {"Shield Bash", "Battle Cry", "Parry", "Cleave"},
-        desc      = "A seasoned frontline fighter clad in heavy armour.",
-    },
-    Mage = {
-        icon      = "🔮",
-        color     = Color3.fromRGB(100, 80,  210),
-        hp        = 80,
-        mana      = 200,
-        stamina   = 60,
-        walkSpeed = 14,
-        abilities = {"Fireball", "Frost Nova", "Arcane Missile", "Blink"},
-        desc      = "A scholar of the arcane arts, wielding devastating spells.",
-    },
-    Rogue = {
-        icon      = "🗡️",
-        color     = Color3.fromRGB(60,  180, 80),
-        hp        = 100,
-        mana      = 60,
-        stamina   = 140,
-        walkSpeed = 20,
-        abilities = {"Backstab", "Smoke Bomb", "Vanish", "Poison Blade"},
-        desc      = "A nimble shadow-walker who strikes from the darkness.",
-    },
-    Paladin = {
-        icon      = "🛡️",
-        color     = Color3.fromRGB(220, 190, 60),
-        hp        = 130,
-        mana      = 100,
-        stamina   = 100,
-        walkSpeed = 15,
-        abilities = {"Holy Strike", "Lay on Hands", "Divine Shield", "Consecrate"},
-        desc      = "A holy warrior blessed with healing and divine might.",
-    },
-    Ranger = {
-        icon      = "🏹",
-        color     = Color3.fromRGB(80,  160, 200),
-        hp        = 110,
-        mana      = 80,
-        stamina   = 130,
-        walkSpeed = 18,
-        abilities = {"Rapid Shot", "Track Prey", "Camouflage", "Eagle Eye"},
-        desc      = "A swift archer attuned to nature and precision.",
-    },
+local requestFn =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+local COLORS = {
+    bg = Color3.fromRGB(24, 15, 38),
+    panel = Color3.fromRGB(37, 22, 58),
+    panelAlt = Color3.fromRGB(49, 30, 77),
+    surface = Color3.fromRGB(68, 42, 104),
+    surfaceHover = Color3.fromRGB(84, 52, 127),
+    accent = Color3.fromRGB(181, 124, 255),
+    accentSoft = Color3.fromRGB(132, 93, 191),
+    text = Color3.fromRGB(245, 237, 255),
+    subtext = Color3.fromRGB(201, 184, 226),
+    success = Color3.fromRGB(123, 229, 177),
+    warning = Color3.fromRGB(255, 190, 124),
+    danger = Color3.fromRGB(255, 119, 155),
 }
-
-local Emotes = {
-    "Wave", "Bow", "Cheer", "Sit",
-    "Point", "Salute", "Kneel", "Laugh",
-    "Shrug", "Clap",
-}
-
-local QuestLog = {
-    { name = "The Lost Sword",     status = "Active",    desc = "Find the blade lost in the Whispering Woods." },
-    { name = "Dragon's Hoard",     status = "Active",    desc = "Retrieve three golden coins from the cave." },
-    { name = "Village Healer",     status = "Completed", desc = "Deliver medicine to the sick elder." },
-    { name = "Bandit Bounty",      status = "Active",    desc = "Defeat five bandits on the King's Road." },
-    { name = "The Ancient Scroll", status = "Failed",    desc = "The scroll crumbled before you could read it." },
-}
-
-local Inventory = {
-    { name = "Health Potion",   qty = 3,  icon = "🧪" },
-    { name = "Mana Crystal",    qty = 2,  icon = "💎" },
-    { name = "Iron Sword",      qty = 1,  icon = "⚔️"  },
-    { name = "Leather Boots",   qty = 1,  icon = "👢" },
-    { name = "Bread Ration",    qty = 5,  icon = "🍞" },
-    { name = "Torch",           qty = 2,  icon = "🔦" },
-    { name = "Lockpick",        qty = 4,  icon = "🗝️" },
-    { name = "Enchanted Cloak", qty = 1,  icon = "🧣" },
-}
-
--- ============================================================
---  STATE
--- ============================================================
-
-local State = {
-    class     = nil,
-    hp        = 100,
-    maxHp     = 100,
-    mana      = 100,
-    maxMana   = 100,
-    stamina   = 100,
-    maxStamina= 100,
-    level     = 1,
-    xp        = 0,
-    xpNeeded  = 100,
-    gold      = 250,
-    inCombat  = false,
-    title     = "Wanderer",
-    roleplaying = false,
-}
-
--- ============================================================
---  HELPERS
--- ============================================================
-
-local function notify(title, content, duration, image)
-    Rayfield:Notify({
-        Title    = title,
-        Content  = content,
-        Duration = duration or 4,
-        Image    = image or 4483362458,
-    })
-end
-
-local function applyClass(className)
-    local data = Classes[className]
-    if not data then return end
-    State.class      = className
-    State.maxHp      = data.hp
-    State.hp         = data.hp
-    State.maxMana    = data.mana
-    State.mana       = data.mana
-    State.maxStamina = data.stamina
-    State.stamina    = data.stamina
-
-    if Humanoid then
-        Humanoid.MaxHealth = data.hp
-        Humanoid.Health    = data.hp
-        Humanoid.WalkSpeed = data.walkSpeed
+local function getGuiParent()
+    if gethui then
+        return gethui()
     end
-
-    notify(
-        "⚔️  Class Selected",
-        string.format("You are now a %s %s!\n%s", data.icon, className, data.desc),
-        6
+    local ok, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if ok and coreGui then
+        return coreGui
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+local function makeApiUrl(path, query)
+    local url = string.format("https://api.github.com/repos/%s/%s/%s", GITHUB_USER, GITHUB_REPO, path)
+    if query then
+        url = url .. "?" .. query
+    end
+    return url
+end
+local function makeRawUrl(path)
+    local safePath = path:gsub("^/+", "")
+    return string.format(
+        "https://raw.githubusercontent.com/%s/%s/%s/%s",
+        GITHUB_USER,
+        GITHUB_REPO,
+        GITHUB_BRANCH,
+        safePath
     )
 end
-
-local function gainXP(amount)
-    State.xp = State.xp + amount
-    if State.xp >= State.xpNeeded then
-        State.xp       = State.xp - State.xpNeeded
-        State.level    = State.level + 1
-        State.xpNeeded = math.floor(State.xpNeeded * 1.4)
-        notify("✨ Level Up!", "You reached Level " .. State.level .. "!", 5)
+local function httpGet(url, useGithubHeaders)
+    if type(requestFn) == "function" then
+        local response = requestFn({
+            Url = url,
+            Method = "GET",
+            Headers = useGithubHeaders and {
+                ["Accept"] = "application/vnd.github+json",
+                ["User-Agent"] = "LARP-Hub-Launcher",
+                ["X-GitHub-Api-Version"] = "2022-11-28",
+            } or {},
+        })
+        if not response then
+            error("No response received from the HTTP request function.")
+        end
+        local statusCode = tonumber(response.StatusCode or response.Status) or 0
+        if statusCode < 200 or statusCode >= 300 then
+            error(("GitHub request failed (%d): %s"):format(statusCode, tostring(response.Body or response.StatusMessage or "Unknown error")))
+        end
+        return response.Body or ""
     end
+    if not useGithubHeaders and game and game.HttpGet then
+        local ok, body = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if ok then
+            return body
+        end
+    end
+    error("This launcher needs an executor HTTP request function for GitHub API access.")
 end
-
-local function useAbility(name)
-    if not State.class then
-        notify("❌ No Class", "Select a class first!", 3)
-        return
+local function decodeJson(body)
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+    if not ok then
+        error("GitHub returned invalid JSON.")
     end
-    local manaCost    = math.random(10, 25)
-    local staminaCost = math.random(5, 15)
-    if State.mana < manaCost then
-        notify("💧 Out of Mana", "Not enough mana to cast " .. name, 3)
-        return
+    return data
+end
+local function hasDeprecatedSegment(path)
+    for segment in string.gmatch(path, "[^/]+") do
+        if segment:lower() == "deprecated" then
+            return true
+        end
     end
-    if State.stamina < staminaCost then
-        notify("😓 Exhausted", "Not enough stamina to use " .. name, 3)
-        return
+    return false
+end
+local function shortenMessage(message, maxLength)
+    local safeMessage = tostring(message or "No message"):gsub("%s+", " ")
+    if #safeMessage <= maxLength then
+        return safeMessage
     end
-    State.mana    = math.max(0, State.mana    - manaCost)
-    State.stamina = math.max(0, State.stamina - staminaCost)
-    local damage = math.random(15, 60)
-    gainXP(math.random(5, 15))
-    notify(
-        "⚡ " .. name,
-        string.format("You used %s!\nDealt %d damage  |  -%d Mana  |  -%d Stamina",
-            name, damage, manaCost, staminaCost),
-        4
+    return safeMessage:sub(1, maxLength - 3) .. "..."
+end
+local commitCache = {}
+local function getLatestCommit(path)
+    if commitCache[path] then
+        return commitCache[path]
+    end
+    local query = string.format(
+        "sha=%s&path=%s&per_page=1",
+        HttpService:UrlEncode(GITHUB_BRANCH),
+        HttpService:UrlEncode(path)
     )
-end
-
-local function doEmote(emoteName)
-    if Humanoid and Humanoid.Parent then
-        local anim = Instance.new("Animation")
-        -- Placeholder AnimationId (replace with your own asset IDs)
-        local ids = {
-            Wave    = "rbxassetid://507770239",
-            Bow     = "rbxassetid://507770680",
-            Cheer   = "rbxassetid://507770677",
-            Sit     = "rbxassetid://2506281703",
-            Point   = "rbxassetid://507770453",
-            Salute  = "rbxassetid://3360692915",
-            Kneel   = "rbxassetid://507770070",
-            Laugh   = "rbxassetid://507770818",
-            Shrug   = "rbxassetid://3360692915",
-            Clap    = "rbxassetid://507770239",
-        }
-        anim.AnimationId = ids[emoteName] or "rbxassetid://507770239"
-        local track = Humanoid:LoadAnimation(anim)
-        track:Play()
-        notify("🎭 Emote", emoteName, 2)
+    local body = httpGet(makeApiUrl("commits", query), true)
+    local data = decodeJson(body)
+    local latest = data and data[1]
+    if type(latest) ~= "table" then
+        error("No commit data was returned for " .. path)
     end
+    local commit = {
+        sha = tostring(latest.sha or "unknown"),
+        shortSha = tostring(latest.sha or "unknown"):sub(1, 7),
+        message = latest.commit and latest.commit.message or "No message",
+        date = latest.commit and latest.commit.committer and latest.commit.committer.date or "Unknown date",
+    }
+    commitCache[path] = commit
+    return commit
 end
-
--- ============================================================
---  BUILD RAYFIELD WINDOW
--- ============================================================
-
-local Window = Rayfield:CreateWindow({
-    Name            = "⚔️  LARP System",
-    LoadingTitle    = "LARP System",
-    LoadingSubtitle = "Awakening your destiny...",
-    Theme           = "Default",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings   = false,
-    ConfigurationSaving = {
-        Enabled  = true,
-        FolderName = "LARPSystem",
-        FileName   = "Config",
-    },
-    KeySystem = false,
-})
-
--- ╔══════════════════════════════════╗
--- ║         TAB: CHARACTER           ║
--- ╚══════════════════════════════════╝
-
-local CharTab = Window:CreateTab("Character", 4483362458)
-
-CharTab:CreateSection("⚔️  Choose Your Class")
-
-for className, data in pairs(Classes) do
-    CharTab:CreateButton({
-        Name        = data.icon .. "  " .. className,
-        Description = data.desc,
-        Callback    = function()
-            applyClass(className)
-        end,
-    })
+local function getRepoTree()
+    local body = httpGet(makeApiUrl("git/trees/" .. GITHUB_BRANCH, "recursive=1"), true)
+    local data = decodeJson(body)
+    if type(data) ~= "table" or type(data.tree) ~= "table" then
+        error("GitHub tree response did not include file data.")
+    end
+    return data.tree
 end
-
-CharTab:CreateSection("📛  Identity")
-
-CharTab:CreateInput({
-    Name        = "Character Name",
-    Description = "Set your LARP character's name",
-    PlaceholderText = "Enter name...",
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(value)
-        if value ~= "" then
-            LocalPlayer.DisplayName = value  -- cosmetic only
-            notify("📛 Name Set", "You are now known as: " .. value, 4)
-        end
-    end,
-})
-
-CharTab:CreateInput({
-    Name        = "Title / Rank",
-    Description = "e.g. Knight, Archmage, Shadow Hand",
-    PlaceholderText = "Enter title...",
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(value)
-        if value ~= "" then
-            State.title = value
-            notify("📜 Title Set", "Your title is now: " .. value, 3)
-        end
-    end,
-})
-
-CharTab:CreateSection("🗺️  Backstory")
-
-CharTab:CreateInput({
-    Name        = "Backstory",
-    Description = "Write a short backstory for your character",
-    PlaceholderText = "I was born in a small village...",
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(value)
-        if value ~= "" then
-            notify("📖 Backstory Saved", "Your tale has been recorded.", 3)
-        end
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║           TAB: STATS             ║
--- ╚══════════════════════════════════╝
-
-local StatsTab = Window:CreateTab("Stats", 4483362458)
-
-StatsTab:CreateSection("📊  Combat Stats")
-
-local hpBar = StatsTab:CreateSlider({
-    Name    = "❤️  Health",
-    Range   = {0, 200},
-    Increment = 1,
-    CurrentValue = State.hp,
-    Flag    = "HP",
-    Callback = function(value)
-        State.hp = value
-        if Humanoid then Humanoid.Health = value end
-    end,
-})
-
-local manaBar = StatsTab:CreateSlider({
-    Name    = "💧  Mana",
-    Range   = {0, 200},
-    Increment = 1,
-    CurrentValue = State.mana,
-    Flag    = "Mana",
-    Callback = function(value)
-        State.mana = value
-    end,
-})
-
-local staminaBar = StatsTab:CreateSlider({
-    Name    = "⚡  Stamina",
-    Range   = {0, 200},
-    Increment = 1,
-    CurrentValue = State.stamina,
-    Flag    = "Stamina",
-    Callback = function(value)
-        State.stamina = value
-    end,
-})
-
-StatsTab:CreateSection("📈  Progression")
-
-StatsTab:CreateButton({
-    Name        = "🌟  Gain 25 XP",
-    Description = "Practice your skills and earn experience",
-    Callback    = function()
-        gainXP(25)
-        notify("📈 XP Gained", "+25 XP  |  Total: " .. State.xp .. " / " .. State.xpNeeded, 3)
-    end,
-})
-
-StatsTab:CreateButton({
-    Name        = "💰  Earn 50 Gold",
-    Description = "Complete a trade or loot a chest",
-    Callback    = function()
-        State.gold = State.gold + 50
-        notify("💰 Gold Earned", "+50 Gold  |  Total: " .. State.gold .. " Gold", 3)
-    end,
-})
-
-StatsTab:CreateButton({
-    Name        = "🧪  Restore All Stats",
-    Description = "Use a campfire to rest and recover",
-    Callback    = function()
-        State.hp      = State.maxHp
-        State.mana    = State.maxMana
-        State.stamina = State.maxStamina
-        if Humanoid then Humanoid.Health = Humanoid.MaxHealth end
-        notify("🏕️  Rested", "All stats fully restored!", 4)
-    end,
-})
-
-StatsTab:CreateSection("⚙️  Walk Speed")
-
-StatsTab:CreateSlider({
-    Name      = "🏃  Walk Speed",
-    Range     = {8, 32},
-    Increment = 1,
-    CurrentValue = 16,
-    Flag      = "WalkSpeed",
-    Callback  = function(value)
-        if Humanoid then Humanoid.WalkSpeed = value end
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║         TAB: ABILITIES           ║
--- ╚══════════════════════════════════╝
-
-local AbilTab = Window:CreateTab("Abilities", 4483362458)
-
-AbilTab:CreateSection("🔥  Class Abilities")
-
-AbilTab:CreateButton({
-    Name        = "📋  Show My Abilities",
-    Description = "List all abilities for your current class",
-    Callback    = function()
-        if not State.class then
-            notify("❌ No Class", "Select a class from the Character tab first.", 4)
-            return
-        end
-        local data = Classes[State.class]
-        local list = table.concat(data.abilities, "\n  • ")
-        notify(
-            data.icon .. "  " .. State.class .. " Abilities",
-            "  • " .. list,
-            8
-        )
-    end,
-})
-
--- Generic ability buttons (all classes)
-local allAbilities = {
-    { name = "Shield Bash",    icon = "🛡️" },
-    { name = "Fireball",       icon = "🔥" },
-    { name = "Backstab",       icon = "🗡️" },
-    { name = "Holy Strike",    icon = "✨" },
-    { name = "Rapid Shot",     icon = "🏹" },
-    { name = "Battle Cry",     icon = "📯" },
-    { name = "Frost Nova",     icon = "❄️" },
-    { name = "Smoke Bomb",     icon = "💨" },
-    { name = "Lay on Hands",   icon = "🙏" },
-    { name = "Eagle Eye",      icon = "👁️" },
-    { name = "Blink",          icon = "⚡" },
-    { name = "Consecrate",     icon = "🌟" },
-}
-
-AbilTab:CreateSection("⚡  Use an Ability")
-
-for _, ab in ipairs(allAbilities) do
-    AbilTab:CreateButton({
-        Name     = ab.icon .. "  " .. ab.name,
-        Callback = function()
-            useAbility(ab.name)
-        end,
-    })
-end
-
-AbilTab:CreateSection("🎯  Combat Mode")
-
-AbilTab:CreateToggle({
-    Name        = "⚔️  Combat Stance",
-    Description = "Enable combat stance for quicker reactions",
-    CurrentValue = false,
-    Flag        = "CombatStance",
-    Callback    = function(value)
-        State.inCombat = value
-        if value then
-            if Humanoid then Humanoid.WalkSpeed = (Humanoid.WalkSpeed + 4) end
-            notify("⚔️  Combat!", "You enter a combat stance!", 3)
-        else
-            if Humanoid then Humanoid.WalkSpeed = math.max(8, Humanoid.WalkSpeed - 4) end
-            notify("🕊️  At Ease", "You stand down.", 3)
-        end
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║          TAB: ROLEPLAY           ║
--- ╚══════════════════════════════════╝
-
-local RPTab = Window:CreateTab("Roleplay", 4483362458)
-
-RPTab:CreateSection("🎭  Emotes")
-
-for _, emote in ipairs(Emotes) do
-    RPTab:CreateButton({
-        Name     = "🎭  " .. emote,
-        Callback = function()
-            doEmote(emote)
-        end,
-    })
-end
-
-RPTab:CreateSection("💬  RP Chat")
-
-RPTab:CreateInput({
-    Name            = "📣  /me Action",
-    Description     = "Describe your character's action",
-    PlaceholderText = "draws their sword slowly...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(value)
-        if value ~= "" then
-            local msg = string.format("*%s %s*", LocalPlayer.Name, value)
-            -- In a real game, fire a RemoteEvent here instead
-            notify("💬 RP Action", msg, 5)
-        end
-    end,
-})
-
-RPTab:CreateInput({
-    Name            = "📜  /say In-Character",
-    Description     = "Speak as your character",
-    PlaceholderText = "Hail, traveller! State your business.",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(value)
-        if value ~= "" then
-            notify("🗣️  " .. LocalPlayer.Name, '"' .. value .. '"', 5)
-        end
-    end,
-})
-
-RPTab:CreateSection("⚙️  RP Settings")
-
-RPTab:CreateToggle({
-    Name        = "🎭  RP Mode",
-    Description = "Mark yourself as actively roleplaying",
-    CurrentValue = false,
-    Flag        = "RPMode",
-    Callback    = function(value)
-        State.roleplaying = value
-        notify(
-            value and "🎭 RP Mode ON" or "🎭 RP Mode OFF",
-            value and "You are now in character." or "You have stepped out of character.",
-            3
-        )
-    end,
-})
-
-RPTab:CreateToggle({
-    Name        = "🌙  Roleplay Nametag",
-    Description = "Show your class & title above your head",
-    CurrentValue = false,
-    Flag        = "RPNametag",
-    Callback    = function(value)
-        -- Implement BillboardGui nametag here if desired
-        notify(
-            value and "🏷️ Nametag Enabled" or "🏷️ Nametag Disabled",
-            value and "Your class title is now visible." or "Nametag hidden.",
-            3
-        )
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║         TAB: INVENTORY           ║
--- ╚══════════════════════════════════╝
-
-local InvTab = Window:CreateTab("Inventory", 4483362458)
-
-InvTab:CreateSection("🎒  Your Items")
-
-for _, item in ipairs(Inventory) do
-    InvTab:CreateButton({
-        Name        = item.icon .. "  " .. item.name,
-        Description = "Quantity: " .. item.qty,
-        Callback    = function()
-            if item.qty <= 0 then
-                notify("❌ Empty", "You have no " .. item.name .. " left.", 3)
-                return
+local function buildLaunchEntries(tree)
+    local rootFolders = {}
+    local files = {}
+    for _, item in ipairs(tree) do
+        local path = item.path
+        if type(path) == "string" and not hasDeprecatedSegment(path) then
+            local firstFolder = path:match("^([^/]+)/")
+            if firstFolder then
+                rootFolders[firstFolder] = true
             end
-            item.qty = item.qty - 1
-            if item.name == "Health Potion" then
-                State.hp = math.min(State.maxHp, State.hp + 40)
-                if Humanoid then Humanoid.Health = State.hp end
-                notify("🧪 Potion Used", "Restored 40 HP!  Remaining: " .. item.qty, 4)
-            elseif item.name == "Mana Crystal" then
-                State.mana = math.min(State.maxMana, State.mana + 50)
-                notify("💎 Crystal Used", "Restored 50 Mana!  Remaining: " .. item.qty, 4)
-            else
-                notify(item.icon .. "  " .. item.name, "Used x1.  Remaining: " .. item.qty, 3)
+            if item.type == "blob" then
+                files[path] = true
             end
-        end,
-    })
-end
-
-InvTab:CreateSection("💰  Gold Purse")
-
-InvTab:CreateButton({
-    Name        = "💰  Check Gold",
-    Description = "View your current gold balance",
-    Callback    = function()
-        notify("💰 Gold", "You have " .. State.gold .. " gold coins.", 4)
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║         TAB: QUESTS              ║
--- ╚══════════════════════════════════╝
-
-local QuestTab = Window:CreateTab("Quests", 4483362458)
-
-QuestTab:CreateSection("📜  Quest Journal")
-
-for _, quest in ipairs(QuestLog) do
-    local statusIcon =
-        quest.status == "Completed" and "✅" or
-        quest.status == "Failed"    and "❌" or "🔵"
-
-    QuestTab:CreateButton({
-        Name        = statusIcon .. "  " .. quest.name,
-        Description = "[" .. quest.status .. "]  " .. quest.desc,
-        Callback    = function()
-            if quest.status == "Active" then
-                -- Simulate completing the quest
-                quest.status = "Completed"
-                State.gold   = State.gold + 100
-                gainXP(50)
-                notify(
-                    "✅ Quest Complete!",
-                    quest.name .. "\n+100 Gold  |  +50 XP",
-                    6
-                )
-            else
-                notify(
-                    statusIcon .. "  " .. quest.name,
-                    quest.desc .. "\n\nStatus: " .. quest.status,
-                    5
-                )
-            end
-        end,
-    })
-end
-
-QuestTab:CreateSection("🗺️  New Quest")
-
-QuestTab:CreateInput({
-    Name            = "📝  Quest Name",
-    PlaceholderText = "Enter quest name...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(value)
-        if value ~= "" then
-            table.insert(QuestLog, {
-                name   = value,
-                status = "Active",
-                desc   = "A new adventure awaits.",
+        end
+    end
+    local entries = {}
+    for folderName in pairs(rootFolders) do
+        local scriptPath = folderName .. "/" .. folderName .. ".lua"
+        if files[scriptPath] then
+            table.insert(entries, {
+                name = folderName,
+                path = scriptPath,
+                url = makeRawUrl(scriptPath),
             })
-            notify("📜 Quest Added", value .. " added to your journal!", 4)
         end
-    end,
-})
-
--- ╔══════════════════════════════════╗
--- ║         TAB: SETTINGS            ║
--- ╚══════════════════════════════════╝
-
-local SetTab = Window:CreateTab("Settings", 4483362458)
-
-SetTab:CreateSection("🔔  Notifications")
-
-SetTab:CreateToggle({
-    Name        = "🔔  Ability Notifications",
-    CurrentValue = true,
-    Flag        = "AbilityNotif",
-    Callback    = function() end,
-})
-
-SetTab:CreateToggle({
-    Name        = "📈  XP Notifications",
-    CurrentValue = true,
-    Flag        = "XPNotif",
-    Callback    = function() end,
-})
-
-SetTab:CreateSection("🎨  Misc")
-
-SetTab:CreateButton({
-    Name        = "ℹ️  About",
-    Description = "LARP System — Built with Rayfield UI",
-    Callback    = function()
-        notify(
-            "⚔️  LARP System",
-            "A full roleplay framework for Roblox.\nBuilt with Rayfield UI Library.\n\nClasses • Stats • Abilities • Quests • Inventory",
-            8
-        )
-    end,
-})
-
-SetTab:CreateButton({
-    Name        = "🔄  Reset Character",
-    Description = "Clear class and reset all stats",
-    Callback    = function()
-        State.class    = nil
-        State.hp       = 100
-        State.mana     = 100
-        State.stamina  = 100
-        State.level    = 1
-        State.xp       = 0
-        State.gold     = 250
-        if Humanoid then
-            Humanoid.MaxHealth = 100
-            Humanoid.Health    = 100
-            Humanoid.WalkSpeed = 16
-        end
-        notify("🔄 Reset", "Character has been reset to default.", 4)
-    end,
-})
-
--- ============================================================
---  AUTO STAMINA REGEN (passive)
--- ============================================================
-
-local regenConn
-regenConn = RunService.Heartbeat:Connect(function(dt)
-    if State.stamina < State.maxStamina and not State.inCombat then
-        State.stamina = math.min(State.maxStamina, State.stamina + dt * 5)
     end
-    if State.mana < State.maxMana then
-        State.mana = math.min(State.maxMana, State.mana + dt * 2)
+    table.sort(entries, function(a, b)
+        return a.name:lower() < b.name:lower()
+    end)
+    return entries
+end
+local function makeCorner(instance, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = instance
+    return corner
+end
+local function makeStroke(instance, color, transparency, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color
+    stroke.Transparency = transparency or 0
+    stroke.Thickness = thickness or 1
+    stroke.Parent = instance
+    return stroke
+end
+local guiParent = getGuiParent()
+local existing = guiParent:FindFirstChild("LARPHubLauncher")
+if existing then
+    existing:Destroy()
+end
+local gui = Instance.new("ScreenGui")
+gui.Name = "LARPHubLauncher"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then
+    pcall(function()
+        syn.protect_gui(gui)
+    end)
+end
+gui.Parent = guiParent
+local root = Instance.new("Frame")
+root.Name = "Root"
+root.Size = UDim2.new(0, 560, 0, 470)
+root.Position = UDim2.new(0.5, -280, 0.5, -235)
+root.BackgroundColor3 = COLORS.bg
+root.BorderSizePixel = 0
+root.Parent = gui
+makeCorner(root, 18)
+makeStroke(root, COLORS.accentSoft, 0.2, 1.5)
+local glow = Instance.new("ImageLabel")
+glow.Name = "Glow"
+glow.BackgroundTransparency = 1
+glow.Image = "rbxassetid://5028857084"
+glow.ImageColor3 = COLORS.accent
+glow.ImageTransparency = 0.4
+glow.ScaleType = Enum.ScaleType.Slice
+glow.SliceCenter = Rect.new(24, 24, 276, 276)
+glow.Size = UDim2.new(1, 70, 1, 70)
+glow.Position = UDim2.new(0, -35, 0, -35)
+glow.ZIndex = 0
+glow.Parent = root
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 68)
+header.BackgroundColor3 = COLORS.panel
+header.BorderSizePixel = 0
+header.Parent = root
+makeCorner(header, 18)
+local headerFill = Instance.new("Frame")
+headerFill.BackgroundColor3 = COLORS.panel
+headerFill.BorderSizePixel = 0
+headerFill.Size = UDim2.new(1, 0, 0, 24)
+headerFill.Position = UDim2.new(0, 0, 1, -24)
+headerFill.Parent = header
+local title = Instance.new("TextLabel")
+title.BackgroundTransparency = 1
+title.Position = UDim2.new(0, 18, 0, 12)
+title.Size = UDim2.new(1, -90, 0, 24)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = COLORS.text
+title.Text = "LARP Hub Launcher"
+title.Parent = header
+local subtitle = Instance.new("TextLabel")
+subtitle.BackgroundTransparency = 1
+subtitle.Position = UDim2.new(0, 18, 0, 36)
+subtitle.Size = UDim2.new(1, -90, 0, 18)
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 11
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
+subtitle.TextColor3 = COLORS.subtext
+subtitle.Text = string.format("%s/%s [%s]", GITHUB_USER, GITHUB_REPO, GITHUB_BRANCH)
+subtitle.Parent = header
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.new(0, 34, 0, 34)
+closeButton.Position = UDim2.new(1, -48, 0, 17)
+closeButton.BackgroundColor3 = COLORS.surface
+closeButton.BorderSizePixel = 0
+closeButton.AutoButtonColor = false
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Text = "X"
+closeButton.TextSize = 14
+closeButton.TextColor3 = COLORS.text
+closeButton.Parent = header
+makeCorner(closeButton, 10)
+makeStroke(closeButton, COLORS.accentSoft, 0.25, 1)
+local summaryCard = Instance.new("Frame")
+summaryCard.Name = "SummaryCard"
+summaryCard.Size = UDim2.new(1, -24, 0, 122)
+summaryCard.Position = UDim2.new(0, 12, 0, 82)
+summaryCard.BackgroundColor3 = COLORS.panel
+summaryCard.BorderSizePixel = 0
+summaryCard.Parent = root
+makeCorner(summaryCard, 14)
+makeStroke(summaryCard, COLORS.accentSoft, 0.35, 1)
+local summaryPadding = Instance.new("UIPadding")
+summaryPadding.PaddingTop = UDim.new(0, 12)
+summaryPadding.PaddingBottom = UDim.new(0, 12)
+summaryPadding.PaddingLeft = UDim.new(0, 12)
+summaryPadding.PaddingRight = UDim.new(0, 12)
+summaryPadding.Parent = summaryCard
+local summaryLayout = Instance.new("UIListLayout")
+summaryLayout.Padding = UDim.new(0, 5)
+summaryLayout.Parent = summaryCard
+local statusLabel = Instance.new("TextLabel")
+statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, 0, 0, 18)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 13
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.TextColor3 = COLORS.accent
+statusLabel.Text = "Loading repository data..."
+statusLabel.Parent = summaryCard
+local helperLabel = Instance.new("TextLabel")
+helperLabel.BackgroundTransparency = 1
+helperLabel.AutomaticSize = Enum.AutomaticSize.Y
+helperLabel.Size = UDim2.new(1, 0, 0, 0)
+helperLabel.Font = Enum.Font.Gotham
+helperLabel.TextSize = 11
+helperLabel.TextWrapped = true
+helperLabel.TextXAlignment = Enum.TextXAlignment.Left
+helperLabel.TextYAlignment = Enum.TextYAlignment.Top
+helperLabel.TextColor3 = COLORS.subtext
+helperLabel.Text = "The launcher scans top-level folders in LARP_Hub, ignores anything inside Deprecated folders, and only creates buttons when it finds FolderName/FolderName.lua."
+helperLabel.Parent = summaryCard
+local launcherCommitLabel = Instance.new("TextLabel")
+launcherCommitLabel.BackgroundTransparency = 1
+launcherCommitLabel.AutomaticSize = Enum.AutomaticSize.Y
+launcherCommitLabel.Size = UDim2.new(1, 0, 0, 0)
+launcherCommitLabel.Font = Enum.Font.Gotham
+launcherCommitLabel.TextSize = 11
+launcherCommitLabel.TextWrapped = true
+launcherCommitLabel.TextXAlignment = Enum.TextXAlignment.Left
+launcherCommitLabel.TextYAlignment = Enum.TextYAlignment.Top
+launcherCommitLabel.TextColor3 = COLORS.text
+launcherCommitLabel.Text = "Launcher commit: Loading..."
+launcherCommitLabel.Parent = summaryCard
+local selectedCommitLabel = Instance.new("TextLabel")
+selectedCommitLabel.BackgroundTransparency = 1
+selectedCommitLabel.AutomaticSize = Enum.AutomaticSize.Y
+selectedCommitLabel.Size = UDim2.new(1, 0, 0, 0)
+selectedCommitLabel.Font = Enum.Font.Gotham
+selectedCommitLabel.TextSize = 11
+selectedCommitLabel.TextWrapped = true
+selectedCommitLabel.TextXAlignment = Enum.TextXAlignment.Left
+selectedCommitLabel.TextYAlignment = Enum.TextYAlignment.Top
+selectedCommitLabel.TextColor3 = COLORS.text
+selectedCommitLabel.Text = "Selected script commit: None yet"
+selectedCommitLabel.Parent = summaryCard
+local listLabel = Instance.new("TextLabel")
+listLabel.BackgroundTransparency = 1
+listLabel.Position = UDim2.new(0, 14, 0, 214)
+listLabel.Size = UDim2.new(1, -28, 0, 18)
+listLabel.Font = Enum.Font.GothamBold
+listLabel.TextSize = 12
+listLabel.TextXAlignment = Enum.TextXAlignment.Left
+listLabel.TextColor3 = COLORS.subtext
+listLabel.Text = "Launchable Scripts"
+listLabel.Parent = root
+local listFrame = Instance.new("ScrollingFrame")
+listFrame.Name = "ListFrame"
+listFrame.Position = UDim2.new(0, 12, 0, 238)
+listFrame.Size = UDim2.new(1, -24, 1, -250)
+listFrame.BackgroundColor3 = COLORS.panel
+listFrame.BorderSizePixel = 0
+listFrame.ScrollBarThickness = 5
+listFrame.ScrollBarImageColor3 = COLORS.accentSoft
+listFrame.CanvasSize = UDim2.new()
+listFrame.Parent = root
+makeCorner(listFrame, 14)
+makeStroke(listFrame, COLORS.accentSoft, 0.35, 1)
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 10)
+listPadding.PaddingBottom = UDim.new(0, 10)
+listPadding.PaddingLeft = UDim.new(0, 10)
+listPadding.PaddingRight = UDim.new(0, 10)
+listPadding.Parent = listFrame
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 8)
+listLayout.Parent = listFrame
+local function syncCanvas()
+    listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 20)
+end
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas)
+local dragging = false
+local dragStart
+local startPosition
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = root.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
-
--- ============================================================
---  WELCOME NOTIFICATION
--- ============================================================
-
-task.wait(2)
-notify(
-    "⚔️  LARP System Loaded",
-    "Welcome, adventurer!\nHead to the Character tab to choose your class.",
-    7
-)
+UserInputService.InputChanged:Connect(function(input)
+    if not dragging then
+        return
+    end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+    local delta = input.Position - dragStart
+    root.Position = UDim2.new(
+        startPosition.X.Scale,
+        startPosition.X.Offset + delta.X,
+        startPosition.Y.Scale,
+        startPosition.Y.Offset + delta.Y
+    )
+end)
+local function tweenColor(instance, property, color)
+    TweenService:Create(instance, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        [property] = color,
+    }):Play()
+end
+closeButton.MouseEnter:Connect(function()
+    tweenColor(closeButton, "BackgroundColor3", COLORS.danger)
+end)
+closeButton.MouseLeave:Connect(function()
+    tweenColor(closeButton, "BackgroundColor3", COLORS.surface)
+end)
+closeButton.MouseButton1Click:Connect(function()
+    gui:Destroy()
+end)
+local function setStatus(text, color)
+    statusLabel.Text = text
+    statusLabel.TextColor3 = color or COLORS.accent
+end
+local function setLauncherCommit(commit)
+    launcherCommitLabel.Text = string.format(
+        "Launcher commit: %s | %s | %s",
+        commit.shortSha,
+        commit.date:sub(1, 10),
+        shortenMessage(commit.message, 52)
+    )
+end
+local function setSelectedCommit(entryName, commit)
+    selectedCommitLabel.Text = string.format(
+        "Selected script commit: %s | %s | %s | %s",
+        entryName,
+        commit.shortSha,
+        commit.date:sub(1, 10),
+        shortenMessage(commit.message, 42)
+    )
+end
+local function clearList()
+    for _, child in ipairs(listFrame:GetChildren()) do
+        if child:IsA("GuiButton") or child:IsA("TextLabel") or child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+end
+local function createEmptyState(text)
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 0, 48)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 12
+    label.TextWrapped = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextColor3 = COLORS.subtext
+    label.Text = text
+    label.Parent = listFrame
+end
+local function destroyLauncher()
+    if gui and gui.Parent then
+        gui:Destroy()
+    end
+end
+local function launchEntry(entry)
+    setStatus("Downloading " .. entry.name .. "...", COLORS.warning)
+    selectedCommitLabel.Text = "Selected script commit: Loading..."
+    local okCommit, commit = pcall(function()
+        return entry.commit or getLatestCommit(entry.path)
+    end)
+    if okCommit and commit then
+        entry.commit = commit
+        setSelectedCommit(entry.name, commit)
+    else
+        selectedCommitLabel.Text = "Selected script commit: Unable to load commit info"
+    end
+    local okSource, source = pcall(function()
+        return httpGet(entry.url, false)
+    end)
+    if not okSource then
+        setStatus("Failed to download " .. entry.name, COLORS.danger)
+        return
+    end
+    local chunk, loadError = loadstring(source)
+    if not chunk then
+        setStatus("Script compile failed for " .. entry.name, COLORS.danger)
+        warn("[LARP Hub Launcher] " .. tostring(loadError))
+        return
+    end
+    setStatus("Launching " .. entry.name .. "...", COLORS.success)
+    task.wait(0.1)
+    destroyLauncher()
+    task.spawn(function()
+        local ok, runtimeError = pcall(chunk)
+        if not ok then
+            warn("[LARP Hub Launcher] " .. tostring(runtimeError))
+        end
+    end)
+end
+local function createEntryButton(entry)
+    local button = Instance.new("TextButton")
+    button.Name = entry.name .. "_Button"
+    button.Size = UDim2.new(1, 0, 0, 72)
+    button.BackgroundColor3 = COLORS.surface
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Text = ""
+    button.Parent = listFrame
+    makeCorner(button, 12)
+    makeStroke(button, COLORS.accentSoft, 0.4, 1)
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Position = UDim2.new(0, 12, 0, 10)
+    nameLabel.Size = UDim2.new(1, -120, 0, 20)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 15
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextColor3 = COLORS.text
+    nameLabel.Text = entry.name
+    nameLabel.Parent = button
+    local pathLabel = Instance.new("TextLabel")
+    pathLabel.BackgroundTransparency = 1
+    pathLabel.Position = UDim2.new(0, 12, 0, 30)
+    pathLabel.Size = UDim2.new(1, -120, 0, 14)
+    pathLabel.Font = Enum.Font.Gotham
+    pathLabel.TextSize = 10
+    pathLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pathLabel.TextColor3 = COLORS.subtext
+    pathLabel.Text = entry.path
+    pathLabel.Parent = button
+    local commitLabel = Instance.new("TextLabel")
+    commitLabel.BackgroundTransparency = 1
+    commitLabel.Position = UDim2.new(0, 12, 0, 47)
+    commitLabel.Size = UDim2.new(1, -120, 0, 14)
+    commitLabel.Font = Enum.Font.Gotham
+    commitLabel.TextSize = 10
+    commitLabel.TextXAlignment = Enum.TextXAlignment.Left
+    commitLabel.TextColor3 = COLORS.subtext
+    commitLabel.Text = "Commit: Loading..."
+    commitLabel.Parent = button
+    local launchBadge = Instance.new("TextLabel")
+    launchBadge.BackgroundColor3 = COLORS.panelAlt
+    launchBadge.Position = UDim2.new(1, -104, 0.5, -16)
+    launchBadge.Size = UDim2.new(0, 92, 0, 32)
+    launchBadge.BorderSizePixel = 0
+    launchBadge.Font = Enum.Font.GothamBold
+    launchBadge.TextSize = 12
+    launchBadge.TextColor3 = COLORS.text
+    launchBadge.Text = "EXECUTE"
+    launchBadge.Parent = button
+    makeCorner(launchBadge, 10)
+    makeStroke(launchBadge, COLORS.accentSoft, 0.25, 1)
+    button.MouseEnter:Connect(function()
+        tweenColor(button, "BackgroundColor3", COLORS.surfaceHover)
+    end)
+    button.MouseLeave:Connect(function()
+        tweenColor(button, "BackgroundColor3", COLORS.surface)
+    end)
+    button.MouseButton1Click:Connect(function()
+        launchEntry(entry)
+    end)
+    task.spawn(function()
+        local ok, commit = pcall(function()
+            return getLatestCommit(entry.path)
+        end)
+        if not ok then
+            commitLabel.Text = "Commit: Unable to load"
+            return
+        end
+        entry.commit = commit
+        commitLabel.Text = string.format(
+            "Commit: %s | %s | %s",
+            commit.shortSha,
+            commit.date:sub(1, 10),
+            shortenMessage(commit.message, 30)
+        )
+    end)
+end
+task.spawn(function()
+    clearList()
+    if type(requestFn) ~= "function" then
+        setStatus("Executor request function required for GitHub API access.", COLORS.danger)
+        launcherCommitLabel.Text = "Launcher commit: Unavailable"
+        selectedCommitLabel.Text = "Selected script commit: Unavailable"
+        createEmptyState("Your executor needs request support so the launcher can scan the repo tree and read commit data.")
+        return
+    end
+    local okLauncherCommit, launcherCommit = pcall(function()
+        return getLatestCommit(LAUNCHER_PATH)
+    end)
+    if okLauncherCommit then
+        setLauncherCommit(launcherCommit)
+    else
+        launcherCommitLabel.Text = "Launcher commit: Unable to load"
+    end
+    local okTree, treeOrError = pcall(function()
+        return getRepoTree()
+    end)
+    if not okTree then
+        setStatus("Failed to read LARP_Hub repository tree.", COLORS.danger)
+        createEmptyState(tostring(treeOrError))
+        return
+    end
+    local entries = buildLaunchEntries(treeOrError)
+    if #entries == 0 then
+        setStatus("No launchable scripts found.", COLORS.warning)
+        createEmptyState("No top-level folders contained a matching FolderName/FolderName.lua file after Deprecated paths were ignored.")
+        return
+    end
+    for _, entry in ipairs(entries) do
+        createEntryButton(entry)
+    end
+    setStatus(("Loaded %d launchable script%s."):format(#entries, #entries == 1 and "" or "s"), COLORS.success)
+end)
