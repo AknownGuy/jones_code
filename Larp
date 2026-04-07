@@ -2,22 +2,29 @@ local GITHUB_USER = "AknownGuy"
 local GITHUB_REPO = "LARP_Hub"
 local GITHUB_BRANCH = "master"
 local LAUNCHER_PATH = "Larp"
+
+local SETTINGS_FOLDER = "LARPHubLauncher"
+local SETTINGS_FILE = SETTINGS_FOLDER .. "/settings.json"
+local TOGGLE_KEY = Enum.KeyCode.K
+
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+
 local LocalPlayer = Players.LocalPlayer
 local requestFn =
     (syn and syn.request)
     or (http and http.request)
     or http_request
     or request
+
 local COLORS = {
     bg = Color3.fromRGB(24, 15, 38),
     panel = Color3.fromRGB(37, 22, 58),
     panelAlt = Color3.fromRGB(49, 30, 77),
     surface = Color3.fromRGB(68, 42, 104),
-    surfaceHover = Color3.fromRGB(84, 52, 127),
+    surfaceHover = Color3.fromRGB(86, 53, 132),
     accent = Color3.fromRGB(181, 124, 255),
     accentSoft = Color3.fromRGB(132, 93, 191),
     text = Color3.fromRGB(245, 237, 255),
@@ -26,18 +33,23 @@ local COLORS = {
     warning = Color3.fromRGB(255, 190, 124),
     danger = Color3.fromRGB(255, 119, 155),
 }
+
 local function getGuiParent()
     if gethui then
         return gethui()
     end
+
     local ok, coreGui = pcall(function()
         return game:GetService("CoreGui")
     end)
+
     if ok and coreGui then
         return coreGui
     end
+
     return LocalPlayer:WaitForChild("PlayerGui")
 end
+
 local function makeApiUrl(path, query)
     local url = string.format("https://api.github.com/repos/%s/%s/%s", GITHUB_USER, GITHUB_REPO, path)
     if query then
@@ -45,6 +57,7 @@ local function makeApiUrl(path, query)
     end
     return url
 end
+
 local function makeRawUrl(path)
     local safePath = path:gsub("^/+", "")
     return string.format(
@@ -55,6 +68,7 @@ local function makeRawUrl(path)
         safePath
     )
 end
+
 local function httpGet(url, useGithubHeaders)
     if type(requestFn) == "function" then
         local response = requestFn({
@@ -66,54 +80,138 @@ local function httpGet(url, useGithubHeaders)
                 ["X-GitHub-Api-Version"] = "2022-11-28",
             } or {},
         })
+
         if not response then
             error("No response received from the HTTP request function.")
         end
+
         local statusCode = tonumber(response.StatusCode or response.Status) or 0
         if statusCode < 200 or statusCode >= 300 then
             error(("GitHub request failed (%d): %s"):format(statusCode, tostring(response.Body or response.StatusMessage or "Unknown error")))
         end
+
         return response.Body or ""
     end
+
     if not useGithubHeaders and game and game.HttpGet then
         local ok, body = pcall(function()
             return game:HttpGet(url)
         end)
+
         if ok then
             return body
         end
     end
+
     error("This launcher needs an executor HTTP request function for GitHub API access.")
 end
+
 local function decodeJson(body)
     local ok, data = pcall(function()
         return HttpService:JSONDecode(body)
     end)
+
     if not ok then
         error("GitHub returned invalid JSON.")
     end
+
     return data
 end
+
 local function hasDeprecatedSegment(path)
     for segment in string.gmatch(path, "[^/]+") do
         if segment:lower() == "deprecated" then
             return true
         end
     end
+
     return false
 end
+
 local function shortenMessage(message, maxLength)
     local safeMessage = tostring(message or "No message"):gsub("%s+", " ")
     if #safeMessage <= maxLength then
         return safeMessage
     end
+
     return safeMessage:sub(1, maxLength - 3) .. "..."
 end
+
+local function supportsFileSettings()
+    return type(isfolder) == "function"
+        and type(makefolder) == "function"
+        and type(isfile) == "function"
+        and type(writefile) == "function"
+        and type(readfile) == "function"
+end
+
+local function loadSettings()
+    local defaults = {
+        autoExec = false,
+        lastScriptPath = nil,
+    }
+
+    if not supportsFileSettings() then
+        return defaults
+    end
+
+    pcall(function()
+        if not isfolder(SETTINGS_FOLDER) then
+            makefolder(SETTINGS_FOLDER)
+        end
+    end)
+
+    if not isfile(SETTINGS_FILE) then
+        return defaults
+    end
+
+    local ok, raw = pcall(readfile, SETTINGS_FILE)
+    if not ok or type(raw) ~= "string" or raw == "" then
+        return defaults
+    end
+
+    local okDecode, decoded = pcall(function()
+        return HttpService:JSONDecode(raw)
+    end)
+
+    if not okDecode or type(decoded) ~= "table" then
+        return defaults
+    end
+
+    return {
+        autoExec = decoded.autoExec == true,
+        lastScriptPath = type(decoded.lastScriptPath) == "string" and decoded.lastScriptPath or nil,
+    }
+end
+
+local settings = loadSettings()
+
+local function saveSettings()
+    if not supportsFileSettings() then
+        return false
+    end
+
+    local ok = pcall(function()
+        if not isfolder(SETTINGS_FOLDER) then
+            makefolder(SETTINGS_FOLDER)
+        end
+
+        writefile(SETTINGS_FILE, HttpService:JSONEncode({
+            autoExec = settings.autoExec == true,
+            lastScriptPath = settings.lastScriptPath,
+        }))
+    end)
+
+    return ok
+end
+
 local commitCache = {}
+
 local function getLatestCommit(path)
     if commitCache[path] then
         return commitCache[path]
     end
+
     local query = string.format(
         "sha=%s&path=%s&per_page=1",
         HttpService:UrlEncode(GITHUB_BRANCH),
@@ -122,29 +220,36 @@ local function getLatestCommit(path)
     local body = httpGet(makeApiUrl("commits", query), true)
     local data = decodeJson(body)
     local latest = data and data[1]
+
     if type(latest) ~= "table" then
         error("No commit data was returned for " .. path)
     end
+
     local commit = {
         sha = tostring(latest.sha or "unknown"),
         shortSha = tostring(latest.sha or "unknown"):sub(1, 7),
         message = latest.commit and latest.commit.message or "No message",
         date = latest.commit and latest.commit.committer and latest.commit.committer.date or "Unknown date",
     }
+
     commitCache[path] = commit
     return commit
 end
+
 local function getRepoTree()
     local body = httpGet(makeApiUrl("git/trees/" .. GITHUB_BRANCH, "recursive=1"), true)
     local data = decodeJson(body)
     if type(data) ~= "table" or type(data.tree) ~= "table" then
         error("GitHub tree response did not include file data.")
     end
+
     return data.tree
 end
+
 local function buildLaunchEntries(tree)
     local rootFolders = {}
     local files = {}
+
     for _, item in ipairs(tree) do
         local path = item.path
         if type(path) == "string" and not hasDeprecatedSegment(path) then
@@ -152,12 +257,15 @@ local function buildLaunchEntries(tree)
             if firstFolder then
                 rootFolders[firstFolder] = true
             end
+
             if item.type == "blob" then
                 files[path] = true
             end
         end
     end
+
     local entries = {}
+
     for folderName in pairs(rootFolders) do
         local scriptPath = folderName .. "/" .. folderName .. ".lua"
         if files[scriptPath] then
@@ -165,20 +273,27 @@ local function buildLaunchEntries(tree)
                 name = folderName,
                 path = scriptPath,
                 url = makeRawUrl(scriptPath),
+                category = "games",
+                source = nil,
+                commit = nil,
             })
         end
     end
+
     table.sort(entries, function(a, b)
         return a.name:lower() < b.name:lower()
     end)
+
     return entries
 end
+
 local function makeCorner(instance, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius)
     corner.Parent = instance
     return corner
 end
+
 local function makeStroke(instance, color, transparency, thickness)
     local stroke = Instance.new("UIStroke")
     stroke.Color = color
@@ -187,77 +302,148 @@ local function makeStroke(instance, color, transparency, thickness)
     stroke.Parent = instance
     return stroke
 end
+
+local function parseCategoryFromFirstLine(source)
+    local firstLine = tostring(source or ""):match("([^\r\n]*)") or ""
+    local normalized = firstLine:lower()
+    normalized = normalized:gsub("^%s*%-%-+%s*", "")
+    normalized = normalized:gsub("^%s*#%s*", "")
+    normalized = normalized:gsub("^%s*category%s*:%s*", "")
+    normalized = normalized:match("^%s*(.-)%s*$") or ""
+    normalized = normalized:gsub("[^%a%s]", " ")
+    normalized = normalized:gsub("%s+", " ")
+
+    if normalized == "game" or normalized == "games" then
+        return "games"
+    end
+
+    if normalized == "tool" or normalized == "tools" then
+        return "tools"
+    end
+
+    return nil
+end
+
 local guiParent = getGuiParent()
 local existing = guiParent:FindFirstChild("LARPHubLauncher")
 if existing then
     existing:Destroy()
 end
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "LARPHubLauncher"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
 if syn and syn.protect_gui then
     pcall(function()
         syn.protect_gui(gui)
     end)
 end
+
 gui.Parent = guiParent
+
+local connections = {}
+local launcherClosed = false
+local minimized = false
+
+local function track(connection)
+    table.insert(connections, connection)
+    return connection
+end
+
+local function closeLauncher()
+    if launcherClosed then
+        return
+    end
+
+    launcherClosed = true
+
+    for _, connection in ipairs(connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    table.clear(connections)
+
+    if gui and gui.Parent then
+        gui:Destroy()
+    end
+end
+
 local root = Instance.new("Frame")
 root.Name = "Root"
-root.Size = UDim2.new(0, 560, 0, 470)
-root.Position = UDim2.new(0.5, -280, 0.5, -235)
+root.Size = UDim2.new(0, 620, 0, 520)
+root.Position = UDim2.new(0.5, -310, 0.5, -260)
 root.BackgroundColor3 = COLORS.bg
 root.BorderSizePixel = 0
 root.Parent = gui
 makeCorner(root, 18)
 makeStroke(root, COLORS.accentSoft, 0.2, 1.5)
+
 local glow = Instance.new("ImageLabel")
-glow.Name = "Glow"
 glow.BackgroundTransparency = 1
 glow.Image = "rbxassetid://5028857084"
 glow.ImageColor3 = COLORS.accent
-glow.ImageTransparency = 0.4
+glow.ImageTransparency = 0.45
 glow.ScaleType = Enum.ScaleType.Slice
 glow.SliceCenter = Rect.new(24, 24, 276, 276)
-glow.Size = UDim2.new(1, 70, 1, 70)
-glow.Position = UDim2.new(0, -35, 0, -35)
-glow.ZIndex = 0
+glow.Size = UDim2.new(1, 80, 1, 80)
+glow.Position = UDim2.new(0, -40, 0, -40)
 glow.Parent = root
+
 local header = Instance.new("Frame")
-header.Name = "Header"
 header.Size = UDim2.new(1, 0, 0, 68)
 header.BackgroundColor3 = COLORS.panel
 header.BorderSizePixel = 0
 header.Parent = root
 makeCorner(header, 18)
-local headerFill = Instance.new("Frame")
-headerFill.BackgroundColor3 = COLORS.panel
-headerFill.BorderSizePixel = 0
-headerFill.Size = UDim2.new(1, 0, 0, 24)
-headerFill.Position = UDim2.new(0, 0, 1, -24)
-headerFill.Parent = header
+
+local headerPatch = Instance.new("Frame")
+headerPatch.BackgroundColor3 = COLORS.panel
+headerPatch.BorderSizePixel = 0
+headerPatch.Size = UDim2.new(1, 0, 0, 24)
+headerPatch.Position = UDim2.new(0, 0, 1, -24)
+headerPatch.Parent = header
+
 local title = Instance.new("TextLabel")
 title.BackgroundTransparency = 1
-title.Position = UDim2.new(0, 18, 0, 12)
-title.Size = UDim2.new(1, -90, 0, 24)
+title.Position = UDim2.new(0, 18, 0, 11)
+title.Size = UDim2.new(1, -120, 0, 24)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 20
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.TextColor3 = COLORS.text
-title.Text = "LARP Hub Launcher"
+title.Text = "LARP Hub Launcher v1.1"
 title.Parent = header
+
 local subtitle = Instance.new("TextLabel")
 subtitle.BackgroundTransparency = 1
 subtitle.Position = UDim2.new(0, 18, 0, 36)
-subtitle.Size = UDim2.new(1, -90, 0, 18)
+subtitle.Size = UDim2.new(1, -140, 0, 18)
 subtitle.Font = Enum.Font.Gotham
 subtitle.TextSize = 11
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.TextColor3 = COLORS.subtext
-subtitle.Text = string.format("%s/%s [%s]", GITHUB_USER, GITHUB_REPO, GITHUB_BRANCH)
+subtitle.Text = string.format("%s/%s [%s]  |  K toggles visibility", GITHUB_USER, GITHUB_REPO, GITHUB_BRANCH)
 subtitle.Parent = header
+
+local minimizeButton = Instance.new("TextButton")
+minimizeButton.Size = UDim2.new(0, 34, 0, 34)
+minimizeButton.Position = UDim2.new(1, -88, 0, 17)
+minimizeButton.BackgroundColor3 = COLORS.surface
+minimizeButton.BorderSizePixel = 0
+minimizeButton.AutoButtonColor = false
+minimizeButton.Font = Enum.Font.GothamBold
+minimizeButton.Text = "-"
+minimizeButton.TextSize = 18
+minimizeButton.TextColor3 = COLORS.text
+minimizeButton.Parent = header
+makeCorner(minimizeButton, 10)
+makeStroke(minimizeButton, COLORS.accentSoft, 0.25, 1)
+
 local closeButton = Instance.new("TextButton")
-closeButton.Name = "CloseButton"
 closeButton.Size = UDim2.new(0, 34, 0, 34)
 closeButton.Position = UDim2.new(1, -48, 0, 17)
 closeButton.BackgroundColor3 = COLORS.surface
@@ -270,24 +456,42 @@ closeButton.TextColor3 = COLORS.text
 closeButton.Parent = header
 makeCorner(closeButton, 10)
 makeStroke(closeButton, COLORS.accentSoft, 0.25, 1)
+
+local hiddenHint = Instance.new("TextButton")
+hiddenHint.Visible = false
+hiddenHint.Size = UDim2.new(0, 220, 0, 42)
+hiddenHint.Position = UDim2.new(1, -236, 1, -56)
+hiddenHint.BackgroundColor3 = COLORS.panel
+hiddenHint.BorderSizePixel = 0
+hiddenHint.AutoButtonColor = false
+hiddenHint.Font = Enum.Font.GothamBold
+hiddenHint.TextSize = 12
+hiddenHint.TextColor3 = COLORS.text
+hiddenHint.Text = "Launcher Hidden  |  Press K"
+hiddenHint.Parent = gui
+makeCorner(hiddenHint, 12)
+makeStroke(hiddenHint, COLORS.accentSoft, 0.25, 1)
+
 local summaryCard = Instance.new("Frame")
-summaryCard.Name = "SummaryCard"
-summaryCard.Size = UDim2.new(1, -24, 0, 122)
+summaryCard.Size = UDim2.new(1, -24, 0, 124)
 summaryCard.Position = UDim2.new(0, 12, 0, 82)
 summaryCard.BackgroundColor3 = COLORS.panel
 summaryCard.BorderSizePixel = 0
 summaryCard.Parent = root
 makeCorner(summaryCard, 14)
 makeStroke(summaryCard, COLORS.accentSoft, 0.35, 1)
+
 local summaryPadding = Instance.new("UIPadding")
 summaryPadding.PaddingTop = UDim.new(0, 12)
 summaryPadding.PaddingBottom = UDim.new(0, 12)
 summaryPadding.PaddingLeft = UDim.new(0, 12)
 summaryPadding.PaddingRight = UDim.new(0, 12)
 summaryPadding.Parent = summaryCard
+
 local summaryLayout = Instance.new("UIListLayout")
 summaryLayout.Padding = UDim.new(0, 5)
 summaryLayout.Parent = summaryCard
+
 local statusLabel = Instance.new("TextLabel")
 statusLabel.BackgroundTransparency = 1
 statusLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -297,6 +501,7 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.TextColor3 = COLORS.accent
 statusLabel.Text = "Loading repository data..."
 statusLabel.Parent = summaryCard
+
 local helperLabel = Instance.new("TextLabel")
 helperLabel.BackgroundTransparency = 1
 helperLabel.AutomaticSize = Enum.AutomaticSize.Y
@@ -309,6 +514,7 @@ helperLabel.TextYAlignment = Enum.TextYAlignment.Top
 helperLabel.TextColor3 = COLORS.subtext
 helperLabel.Text = "This launcher scans for scripts under the repo and then makes launchable scripts for them in the GUI"
 helperLabel.Parent = summaryCard
+
 local launcherCommitLabel = Instance.new("TextLabel")
 launcherCommitLabel.BackgroundTransparency = 1
 launcherCommitLabel.AutomaticSize = Enum.AutomaticSize.Y
@@ -321,6 +527,7 @@ launcherCommitLabel.TextYAlignment = Enum.TextYAlignment.Top
 launcherCommitLabel.TextColor3 = COLORS.text
 launcherCommitLabel.Text = "Launcher commit: Loading..."
 launcherCommitLabel.Parent = summaryCard
+
 local selectedCommitLabel = Instance.new("TextLabel")
 selectedCommitLabel.BackgroundTransparency = 1
 selectedCommitLabel.AutomaticSize = Enum.AutomaticSize.Y
@@ -333,20 +540,99 @@ selectedCommitLabel.TextYAlignment = Enum.TextYAlignment.Top
 selectedCommitLabel.TextColor3 = COLORS.text
 selectedCommitLabel.Text = "Selected script commit: None yet"
 selectedCommitLabel.Parent = summaryCard
+
+local settingsCard = Instance.new("Frame")
+settingsCard.Size = UDim2.new(1, -24, 0, 58)
+settingsCard.Position = UDim2.new(0, 12, 0, 216)
+settingsCard.BackgroundColor3 = COLORS.panel
+settingsCard.BorderSizePixel = 0
+settingsCard.Parent = root
+makeCorner(settingsCard, 14)
+makeStroke(settingsCard, COLORS.accentSoft, 0.35, 1)
+
+local settingsTitle = Instance.new("TextLabel")
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Position = UDim2.new(0, 12, 0, 10)
+settingsTitle.Size = UDim2.new(0, 180, 0, 18)
+settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.TextSize = 12
+settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+settingsTitle.TextColor3 = COLORS.text
+settingsTitle.Text = "Settings"
+settingsTitle.Parent = settingsCard
+
+local settingsHint = Instance.new("TextLabel")
+settingsHint.BackgroundTransparency = 1
+settingsHint.Position = UDim2.new(0, 12, 0, 29)
+settingsHint.Size = UDim2.new(1, -180, 0, 16)
+settingsHint.Font = Enum.Font.Gotham
+settingsHint.TextSize = 10
+settingsHint.TextXAlignment = Enum.TextXAlignment.Left
+settingsHint.TextColor3 = COLORS.subtext
+settingsHint.Text = supportsFileSettings() and "Autoexec launches the last selected script." or "Autoexec works for this session only because file functions are unavailable."
+settingsHint.Parent = settingsCard
+
+local autoExecButton = Instance.new("TextButton")
+autoExecButton.Size = UDim2.new(0, 138, 0, 34)
+autoExecButton.Position = UDim2.new(1, -150, 0.5, -17)
+autoExecButton.BackgroundColor3 = COLORS.surface
+autoExecButton.BorderSizePixel = 0
+autoExecButton.AutoButtonColor = false
+autoExecButton.Font = Enum.Font.GothamBold
+autoExecButton.TextSize = 11
+autoExecButton.TextColor3 = COLORS.text
+autoExecButton.Parent = settingsCard
+makeCorner(autoExecButton, 10)
+makeStroke(autoExecButton, COLORS.accentSoft, 0.25, 1)
+
 local listLabel = Instance.new("TextLabel")
 listLabel.BackgroundTransparency = 1
-listLabel.Position = UDim2.new(0, 14, 0, 214)
+listLabel.Position = UDim2.new(0, 14, 0, 286)
 listLabel.Size = UDim2.new(1, -28, 0, 18)
 listLabel.Font = Enum.Font.GothamBold
 listLabel.TextSize = 12
 listLabel.TextXAlignment = Enum.TextXAlignment.Left
 listLabel.TextColor3 = COLORS.subtext
-listLabel.Text = "Launchable Scripts"
+listLabel.Text = "Category Tabs"
 listLabel.Parent = root
+
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, -24, 0, 40)
+tabBar.Position = UDim2.new(0, 12, 0, 309)
+tabBar.BackgroundTransparency = 1
+tabBar.Parent = root
+
+local gamesTabButton = Instance.new("TextButton")
+gamesTabButton.Size = UDim2.new(0, 110, 0, 34)
+gamesTabButton.Position = UDim2.new(0, 0, 0, 3)
+gamesTabButton.BackgroundColor3 = COLORS.surface
+gamesTabButton.BorderSizePixel = 0
+gamesTabButton.AutoButtonColor = false
+gamesTabButton.Font = Enum.Font.GothamBold
+gamesTabButton.TextSize = 12
+gamesTabButton.TextColor3 = COLORS.text
+gamesTabButton.Text = "Games"
+gamesTabButton.Parent = tabBar
+makeCorner(gamesTabButton, 10)
+makeStroke(gamesTabButton, COLORS.accentSoft, 0.25, 1)
+
+local toolsTabButton = Instance.new("TextButton")
+toolsTabButton.Size = UDim2.new(0, 110, 0, 34)
+toolsTabButton.Position = UDim2.new(0, 118, 0, 3)
+toolsTabButton.BackgroundColor3 = COLORS.surface
+toolsTabButton.BorderSizePixel = 0
+toolsTabButton.AutoButtonColor = false
+toolsTabButton.Font = Enum.Font.GothamBold
+toolsTabButton.TextSize = 12
+toolsTabButton.TextColor3 = COLORS.text
+toolsTabButton.Text = "Tools"
+toolsTabButton.Parent = tabBar
+makeCorner(toolsTabButton, 10)
+makeStroke(toolsTabButton, COLORS.accentSoft, 0.25, 1)
+
 local listFrame = Instance.new("ScrollingFrame")
-listFrame.Name = "ListFrame"
-listFrame.Position = UDim2.new(0, 12, 0, 238)
-listFrame.Size = UDim2.new(1, -24, 1, -250)
+listFrame.Position = UDim2.new(0, 12, 0, 352)
+listFrame.Size = UDim2.new(1, -24, 1, -364)
 listFrame.BackgroundColor3 = COLORS.panel
 listFrame.BorderSizePixel = 0
 listFrame.ScrollBarThickness = 5
@@ -355,67 +641,42 @@ listFrame.CanvasSize = UDim2.new()
 listFrame.Parent = root
 makeCorner(listFrame, 14)
 makeStroke(listFrame, COLORS.accentSoft, 0.35, 1)
+
 local listPadding = Instance.new("UIPadding")
 listPadding.PaddingTop = UDim.new(0, 10)
 listPadding.PaddingBottom = UDim.new(0, 10)
 listPadding.PaddingLeft = UDim.new(0, 10)
 listPadding.PaddingRight = UDim.new(0, 10)
 listPadding.Parent = listFrame
+
 local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 8)
 listLayout.Parent = listFrame
+
 local function syncCanvas()
     listFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 20)
 end
-listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas)
-local dragging = false
-local dragStart
-local startPosition
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPosition = root.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if not dragging then
-        return
-    end
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
-    local delta = input.Position - dragStart
-    root.Position = UDim2.new(
-        startPosition.X.Scale,
-        startPosition.X.Offset + delta.X,
-        startPosition.Y.Scale,
-        startPosition.Y.Offset + delta.Y
-    )
-end)
+
+track(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas))
+
 local function tweenColor(instance, property, color)
     TweenService:Create(instance, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         [property] = color,
     }):Play()
 end
-closeButton.MouseEnter:Connect(function()
-    tweenColor(closeButton, "BackgroundColor3", COLORS.danger)
-end)
-closeButton.MouseLeave:Connect(function()
-    tweenColor(closeButton, "BackgroundColor3", COLORS.surface)
-end)
-closeButton.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
+
 local function setStatus(text, color)
     statusLabel.Text = text
     statusLabel.TextColor3 = color or COLORS.accent
 end
+
+local function updateAutoExecButton()
+    autoExecButton.Text = settings.autoExec and "AUTOEXEC: ON" or "AUTOEXEC: OFF"
+    autoExecButton.BackgroundColor3 = settings.autoExec and COLORS.accentSoft or COLORS.surface
+end
+
+updateAutoExecButton()
+
 local function setLauncherCommit(commit)
     launcherCommitLabel.Text = string.format(
         "Launcher commit: %s | %s | %s",
@@ -424,6 +685,7 @@ local function setLauncherCommit(commit)
         shortenMessage(commit.message, 52)
     )
 end
+
 local function setSelectedCommit(entryName, commit)
     selectedCommitLabel.Text = string.format(
         "Selected script commit: %s | %s | %s | %s",
@@ -433,6 +695,13 @@ local function setSelectedCommit(entryName, commit)
         shortenMessage(commit.message, 42)
     )
 end
+
+local function setMinimized(state)
+    minimized = state
+    root.Visible = not state
+    hiddenHint.Visible = state
+end
+
 local function clearList()
     for _, child in ipairs(listFrame:GetChildren()) do
         if child:IsA("GuiButton") or child:IsA("TextLabel") or child:IsA("Frame") then
@@ -440,62 +709,112 @@ local function clearList()
         end
     end
 end
-local function createEmptyState(text)
+
+local function createInfoRow(text, textColor)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, 0, 0, 48)
+    label.Size = UDim2.new(1, 0, 0, 22)
     label.Font = Enum.Font.Gotham
     label.TextSize = 12
-    label.TextWrapped = true
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextColor3 = COLORS.subtext
+    label.TextColor3 = textColor or COLORS.subtext
     label.Text = text
     label.Parent = listFrame
 end
-local function destroyLauncher()
-    if gui and gui.Parent then
-        gui:Destroy()
-    end
+
+local categorizedEntries = {
+    games = {},
+    tools = {},
+}
+local currentTab = "games"
+local createEntryButton
+
+local function updateTabButtons()
+    gamesTabButton.BackgroundColor3 = currentTab == "games" and COLORS.accentSoft or COLORS.surface
+    toolsTabButton.BackgroundColor3 = currentTab == "tools" and COLORS.accentSoft or COLORS.surface
 end
-local function launchEntry(entry)
+
+local function launchEntry(entry, options)
+    if launcherClosed then
+        return
+    end
+
+    options = options or {}
+
     setStatus("Downloading " .. entry.name .. "...", COLORS.warning)
-    selectedCommitLabel.Text = "Selected script commit: Loading..."
-    local okCommit, commit = pcall(function()
-        return entry.commit or getLatestCommit(entry.path)
-    end)
-    if okCommit and commit then
-        entry.commit = commit
-        setSelectedCommit(entry.name, commit)
+
+    if entry.commit then
+        setSelectedCommit(entry.name, entry.commit)
     else
         selectedCommitLabel.Text = "Selected script commit: Unable to load commit info"
     end
-    local okSource, source = pcall(function()
-        return httpGet(entry.url, false)
-    end)
-    if not okSource then
-        setStatus("Failed to download " .. entry.name, COLORS.danger)
-        return
+
+    local source = entry.source
+    if type(source) ~= "string" or source == "" then
+        local okSource, result = pcall(function()
+            return httpGet(entry.url, false)
+        end)
+
+        if not okSource then
+            setStatus("Failed to download " .. entry.name, COLORS.danger)
+            return
+        end
+
+        source = result
+        entry.source = source
     end
+
     local chunk, loadError = loadstring(source)
     if not chunk then
         setStatus("Script compile failed for " .. entry.name, COLORS.danger)
         warn("[LARP Hub Launcher] " .. tostring(loadError))
         return
     end
+
+    settings.lastScriptPath = entry.path
+    saveSettings()
+
     setStatus("Launching " .. entry.name .. "...", COLORS.success)
     task.wait(0.1)
-    destroyLauncher()
+
+    if options.minimizeAfterLaunch then
+        setMinimized(true)
+    elseif options.closeAfterLaunch ~= false then
+        closeLauncher()
+    end
+
     task.spawn(function()
-        local ok, runtimeError = pcall(chunk)
-        if not ok then
+        local okRun, runtimeError = pcall(chunk)
+        if not okRun then
             warn("[LARP Hub Launcher] " .. tostring(runtimeError))
         end
     end)
 end
-local function createEntryButton(entry)
+
+local function renderCurrentTab()
+    clearList()
+    updateTabButtons()
+
+    local tabEntries = categorizedEntries[currentTab] or {}
+    if #tabEntries == 0 then
+        createInfoRow(
+            currentTab == "games"
+                and "No scripts are tagged for the Games tab. Use '-- # games' on the first line."
+                or "No scripts are tagged for the Tools tab. Use '-- # tools' on the first line.",
+            COLORS.subtext
+        )
+        return
+    end
+
+    for _, entry in ipairs(tabEntries) do
+        createEntryButton(entry)
+    end
+end
+
+createEntryButton = function(entry)
     local button = Instance.new("TextButton")
     button.Name = entry.name .. "_Button"
-    button.Size = UDim2.new(1, 0, 0, 72)
+    button.Size = UDim2.new(1, 0, 0, 74)
     button.BackgroundColor3 = COLORS.surface
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
@@ -503,40 +822,49 @@ local function createEntryButton(entry)
     button.Parent = listFrame
     makeCorner(button, 12)
     makeStroke(button, COLORS.accentSoft, 0.4, 1)
+
     local nameLabel = Instance.new("TextLabel")
     nameLabel.BackgroundTransparency = 1
     nameLabel.Position = UDim2.new(0, 12, 0, 10)
-    nameLabel.Size = UDim2.new(1, -120, 0, 20)
+    nameLabel.Size = UDim2.new(1, -136, 0, 20)
     nameLabel.Font = Enum.Font.GothamBold
     nameLabel.TextSize = 15
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.TextColor3 = COLORS.text
     nameLabel.Text = entry.name
     nameLabel.Parent = button
+
     local pathLabel = Instance.new("TextLabel")
     pathLabel.BackgroundTransparency = 1
     pathLabel.Position = UDim2.new(0, 12, 0, 30)
-    pathLabel.Size = UDim2.new(1, -120, 0, 14)
+    pathLabel.Size = UDim2.new(1, -136, 0, 14)
     pathLabel.Font = Enum.Font.Gotham
     pathLabel.TextSize = 10
     pathLabel.TextXAlignment = Enum.TextXAlignment.Left
     pathLabel.TextColor3 = COLORS.subtext
     pathLabel.Text = entry.path
     pathLabel.Parent = button
+
     local commitLabel = Instance.new("TextLabel")
     commitLabel.BackgroundTransparency = 1
     commitLabel.Position = UDim2.new(0, 12, 0, 47)
-    commitLabel.Size = UDim2.new(1, -120, 0, 14)
+    commitLabel.Size = UDim2.new(1, -136, 0, 14)
     commitLabel.Font = Enum.Font.Gotham
     commitLabel.TextSize = 10
     commitLabel.TextXAlignment = Enum.TextXAlignment.Left
     commitLabel.TextColor3 = COLORS.subtext
-    commitLabel.Text = "Commit: Loading..."
+    commitLabel.Text = entry.commit and string.format(
+        "Commit: %s | %s | %s",
+        entry.commit.shortSha,
+        entry.commit.date:sub(1, 10),
+        shortenMessage(entry.commit.message, 32)
+    ) or "Commit: Unable to load"
     commitLabel.Parent = button
+
     local launchBadge = Instance.new("TextLabel")
     launchBadge.BackgroundColor3 = COLORS.panelAlt
-    launchBadge.Position = UDim2.new(1, -104, 0.5, -16)
-    launchBadge.Size = UDim2.new(0, 92, 0, 32)
+    launchBadge.Position = UDim2.new(1, -116, 0.5, -16)
+    launchBadge.Size = UDim2.new(0, 104, 0, 32)
     launchBadge.BorderSizePixel = 0
     launchBadge.Font = Enum.Font.GothamBold
     launchBadge.TextSize = 12
@@ -545,65 +873,266 @@ local function createEntryButton(entry)
     launchBadge.Parent = button
     makeCorner(launchBadge, 10)
     makeStroke(launchBadge, COLORS.accentSoft, 0.25, 1)
-    button.MouseEnter:Connect(function()
-        tweenColor(button, "BackgroundColor3", COLORS.surfaceHover)
-    end)
-    button.MouseLeave:Connect(function()
-        tweenColor(button, "BackgroundColor3", COLORS.surface)
-    end)
-    button.MouseButton1Click:Connect(function()
-        launchEntry(entry)
-    end)
-    task.spawn(function()
-        local ok, commit = pcall(function()
-            return getLatestCommit(entry.path)
-        end)
-        if not ok then
-            commitLabel.Text = "Commit: Unable to load"
+
+    track(button.MouseEnter:Connect(function()
+        if launcherClosed then
             return
         end
-        entry.commit = commit
-        commitLabel.Text = string.format(
-            "Commit: %s | %s | %s",
-            commit.shortSha,
-            commit.date:sub(1, 10),
-            shortenMessage(commit.message, 30)
-        )
-    end)
+        tweenColor(button, "BackgroundColor3", COLORS.surfaceHover)
+    end))
+
+    track(button.MouseLeave:Connect(function()
+        if launcherClosed then
+            return
+        end
+        tweenColor(button, "BackgroundColor3", COLORS.surface)
+    end))
+
+    track(button.MouseButton1Click:Connect(function()
+        launchEntry(entry)
+    end))
 end
+
+local dragging = false
+local dragStart
+local startPosition
+
+track(header.InputBegan:Connect(function(input)
+    if launcherClosed then
+        return
+    end
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = root.Position
+
+        track(input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end))
+    end
+end))
+
+track(UserInputService.InputChanged:Connect(function(input)
+    if launcherClosed or not dragging then
+        return
+    end
+
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+
+    local delta = input.Position - dragStart
+    root.Position = UDim2.new(
+        startPosition.X.Scale,
+        startPosition.X.Offset + delta.X,
+        startPosition.Y.Scale,
+        startPosition.Y.Offset + delta.Y
+    )
+end))
+
+track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if launcherClosed or gameProcessed then
+        return
+    end
+
+    if input.KeyCode == TOGGLE_KEY then
+        setMinimized(not minimized)
+    end
+end))
+
+track(minimizeButton.MouseEnter:Connect(function()
+    tweenColor(minimizeButton, "BackgroundColor3", COLORS.accentSoft)
+end))
+
+track(minimizeButton.MouseLeave:Connect(function()
+    tweenColor(minimizeButton, "BackgroundColor3", COLORS.surface)
+end))
+
+track(closeButton.MouseEnter:Connect(function()
+    tweenColor(closeButton, "BackgroundColor3", COLORS.danger)
+end))
+
+track(closeButton.MouseLeave:Connect(function()
+    tweenColor(closeButton, "BackgroundColor3", COLORS.surface)
+end))
+
+track(minimizeButton.MouseButton1Click:Connect(function()
+    if launcherClosed then
+        return
+    end
+
+    setMinimized(true)
+end))
+
+track(hiddenHint.MouseButton1Click:Connect(function()
+    if launcherClosed then
+        return
+    end
+
+    setMinimized(false)
+end))
+
+track(gamesTabButton.MouseEnter:Connect(function()
+    if currentTab ~= "games" then
+        tweenColor(gamesTabButton, "BackgroundColor3", COLORS.surfaceHover)
+    end
+end))
+
+track(gamesTabButton.MouseLeave:Connect(function()
+    if currentTab ~= "games" then
+        tweenColor(gamesTabButton, "BackgroundColor3", COLORS.surface)
+    end
+end))
+
+track(toolsTabButton.MouseEnter:Connect(function()
+    if currentTab ~= "tools" then
+        tweenColor(toolsTabButton, "BackgroundColor3", COLORS.surfaceHover)
+    end
+end))
+
+track(toolsTabButton.MouseLeave:Connect(function()
+    if currentTab ~= "tools" then
+        tweenColor(toolsTabButton, "BackgroundColor3", COLORS.surface)
+    end
+end))
+
+track(gamesTabButton.MouseButton1Click:Connect(function()
+    if launcherClosed then
+        return
+    end
+
+    currentTab = "games"
+    renderCurrentTab()
+end))
+
+track(toolsTabButton.MouseButton1Click:Connect(function()
+    if launcherClosed then
+        return
+    end
+
+    currentTab = "tools"
+    renderCurrentTab()
+end))
+
+track(closeButton.MouseButton1Click:Connect(function()
+    closeLauncher()
+end))
+
+track(autoExecButton.MouseButton1Click:Connect(function()
+    if launcherClosed then
+        return
+    end
+
+    settings.autoExec = not settings.autoExec
+    saveSettings()
+    updateAutoExecButton()
+    setStatus(settings.autoExec and "Autoexec enabled." or "Autoexec disabled.", COLORS.accent)
+end))
+
 task.spawn(function()
     clearList()
+
     if type(requestFn) ~= "function" then
         setStatus("Executor request function required for GitHub API access.", COLORS.danger)
         launcherCommitLabel.Text = "Launcher commit: Unavailable"
         selectedCommitLabel.Text = "Selected script commit: Unavailable"
-        createEmptyState("Your executor needs request support so the launcher can scan the repo tree and read commit data.")
+        createInfoRow("Your executor needs request support so the launcher can scan scripts and read commit data.", COLORS.subtext)
         return
     end
+
     local okLauncherCommit, launcherCommit = pcall(function()
         return getLatestCommit(LAUNCHER_PATH)
     end)
+
     if okLauncherCommit then
         setLauncherCommit(launcherCommit)
     else
         launcherCommitLabel.Text = "Launcher commit: Unable to load"
     end
+
     local okTree, treeOrError = pcall(function()
         return getRepoTree()
     end)
+
     if not okTree then
         setStatus("Failed to read LARP_Hub repository tree.", COLORS.danger)
-        createEmptyState(tostring(treeOrError))
+        createInfoRow(tostring(treeOrError), COLORS.subtext)
         return
     end
+
     local entries = buildLaunchEntries(treeOrError)
     if #entries == 0 then
         setStatus("No launchable scripts found.", COLORS.warning)
-        createEmptyState("No top-level folders contained a matching FolderName/FolderName.lua file after Deprecated paths were ignored.")
+        createInfoRow("No top-level folders contained a matching FolderName/FolderName.lua file after Deprecated paths were ignored.", COLORS.subtext)
         return
     end
-    for _, entry in ipairs(entries) do
-        createEntryButton(entry)
+
+    for index, entry in ipairs(entries) do
+        setStatus(("Inspecting %s (%d/%d)..."):format(entry.name, index, #entries), COLORS.accent)
+
+        local okSource, sourceOrError = pcall(function()
+            return httpGet(entry.url, false)
+        end)
+
+        if okSource and type(sourceOrError) == "string" then
+            entry.source = sourceOrError
+            entry.category = parseCategoryFromFirstLine(sourceOrError) or "games"
+        else
+            entry.category = "games"
+        end
+
+        local okCommit, commitOrError = pcall(function()
+            return getLatestCommit(entry.path)
+        end)
+
+        if okCommit then
+            entry.commit = commitOrError
+        else
+            warn("[LARP Hub Launcher] Commit lookup failed for " .. entry.path .. ": " .. tostring(commitOrError))
+        end
     end
+
+    categorizedEntries = {
+        games = {},
+        tools = {},
+    }
+
+    for _, entry in ipairs(entries) do
+        table.insert(categorizedEntries[entry.category] or categorizedEntries.games, entry)
+    end
+
+    if #categorizedEntries.games == 0 and #categorizedEntries.tools > 0 then
+        currentTab = "tools"
+    else
+        currentTab = "games"
+    end
+
+    if #categorizedEntries.games == 0 and #categorizedEntries.tools == 0 then
+        createInfoRow("No scripts matched the category rules. Add '-- # games' or '-- # tools' as the first line of each script.", COLORS.subtext)
+        setStatus("No categorized scripts found.", COLORS.warning)
+        return
+    end
+
+    renderCurrentTab()
     setStatus(("Loaded %d launchable script%s."):format(#entries, #entries == 1 and "" or "s"), COLORS.success)
+
+    if settings.autoExec and type(settings.lastScriptPath) == "string" then
+        for _, entry in ipairs(entries) do
+            if entry.path == settings.lastScriptPath then
+                setStatus("Autoexec is enabled. Launching " .. entry.name .. " and minimizing launcher...", COLORS.warning)
+                task.delay(0.35, function()
+                    if not launcherClosed then
+                        launchEntry(entry, {
+                            closeAfterLaunch = false,
+                            minimizeAfterLaunch = true,
+                        })
+                    end
+                end)
+                break
+            end
+        end
+    end
 end)
