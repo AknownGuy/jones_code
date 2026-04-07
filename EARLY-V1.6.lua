@@ -1,7 +1,7 @@
 -- Menu V1.6 | G=menu | V=breakers | F=generator | X=cursor | H=autofloor
 
 local GITHUB_USER   = "AknownGuy"
-local GITHUB_REPO   = "jones_code"
+local GITHUB_REPO   = "LARP_Hub"
 local GITHUB_BRANCH = "master"
 local SCRIPT_FILE   = "EARLY-V1.6.lua"
 

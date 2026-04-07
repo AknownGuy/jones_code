@@ -1,5 +1,5 @@
 local GITHUB_USER = "AknownGuy"
-local GITHUB_REPO = "jones_code"
+local GITHUB_REPO = "LARP_Hub"
 local GITHUB_BRANCH = "master"
 
 local HttpService = game:GetService("HttpService")
