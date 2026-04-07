@@ -1,9 +1,9 @@
 -- Menu V1.55 | G=menu | V=breakers | F=generator | X=cursor | H=autofloor
 
 local GITHUB_USER   = "AknownGuy"
-local GITHUB_REPO   = "LARP_Hub/Error_Code"
+local GITHUB_REPO   = "LARP_Hub"
 local GITHUB_BRANCH = "master"
-local SCRIPT_FILE   = "LatestScript.lua"
+local SCRIPT_FILE   = "/Error_Code/Error_Code.lua"
 
 local HttpService = game:GetService("HttpService")
 
