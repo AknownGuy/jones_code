@@ -1,2 +1,1 @@
--- # games
-loadstring(game:HttpGet("https://github.com/NewNexer/NexerHub/raw/refs/heads/main/NS/Main.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/alizeja/Nullscape-GUI/refs/heads/main/null.lua"))()
