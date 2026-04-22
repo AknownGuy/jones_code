@@ -1,1 +1,2 @@
+-- # games
 loadstring(game:HttpGet("https://raw.githubusercontent.com/alizeja/Nullscape-GUI/refs/heads/main/null.lua"))()
